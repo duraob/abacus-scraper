@@ -1,0 +1,3 @@
+ERROR:root:Attempt 1 failed for https://www.pro-football-reference.com/boxscores/202409080nor.htm: 'NoneType' object has no attribute 'select_one'
+ERROR:root:Attempt 2 failed for https://www.pro-football-reference.com/boxscores/202409080nor.htm: 'NoneType' object has no attribute 'select_one'
+ERROR:root:Attempt 3 failed for https://www.pro-football-reference.com/boxscores/202409080nor.htm: 'NoneType' object has no attribute 'select_one'

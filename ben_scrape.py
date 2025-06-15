@@ -5,7 +5,12 @@ import os
 import pickle
 import hashlib
 from datetime import datetime, timedelta
+import time
+import random
+import logging
 
+# Setup logging
+logging.basicConfig(filename='scraper_errors.log', level=logging.ERROR)
 
 def setupWebDriver():
     """
@@ -89,107 +94,95 @@ def get_game_links(soup):
         print(f"Error getting game links: {e}")
         return None
     
-def get_game_data(driver, game_links, year):
+def get_game_data(driver, game_url, year):
+    # Collect player data as a list of dicts for efficiency
+    player_data = []
+    soup = get_soup(game_url, driver)
 
-    df = pd.DataFrame(columns=['year', 'week', 'weather', 'home_team', 'away_team', 'home_score', 'away_score', 'name', 'team', 'opponent', 'home_away', 'pos', 'snaps', 'snap_pct', 'pass_cmp', 'pass_att', 'pass_yds', 'pass_tds', 'pass_int', 'pass_sack', 'rush_att', 'rush_yds', 'rush_tds', 'targets', 'receptions', 'rec_yds', 'rec_tds', 'fumbles', 'pt2_conv'])
-    for link in game_links:
-        game_url = BASE_URL + link['href']
-        soup = get_soup(game_url, driver)
-        print(soup)
+    # Same Data Needed for all players:
+    week = soup.select_one('div.game_summaries.compressed h2 a').get_text().split(' ')[1]
+    weather = soup.select_one('table#game_info td[data-stat="stat"]', string=lambda x: 'Weather' in str(x.find_previous('th'))).get_text(strip=True) if soup else None
+    home_team = soup.select_one('table#team_stats th[data-stat="home_stat"]').get_text(strip=True)
+    away_team = soup.select_one('table#team_stats th[data-stat="vis_stat"]').get_text(strip=True)
 
-        # Same Data Needed for all players:
-        year = year
-        week = soup.select_one('div.game_summaries compressed h2 a').get_text().split(' ')[1]
-        weather = soup.select_one('table#game_info td[data-stat="stat"]', string=lambda x: 'Weather' in str(x.find_previous('th'))).get_text(strip=True) if soup else None
-        home_team = soup.select_one('table#team_stats th[data-stat="home_stat"]').get_text(strip=True)
-        away_team = soup.select_one('table#team_stats th[data-stat="vis_stat"]').get_text(strip=True)
+    # Get scores from the 7th td (index 6) in the linescore table rows
+    score_rows = soup.select('table.linescore tr')
+    away_score = score_rows[1].select('td')[6].get_text(strip=True) if len(score_rows) > 0 else None
+    home_score = score_rows[2].select('td')[6].get_text(strip=True) if len(score_rows) > 1 else None
 
-        # Get scores from the 7th td (index 6) in the linescore table rows
-        score_rows = soup.select('table.linescore tr')
-        away_score = score_rows[0].select('td')[6].get_text(strip=True) if len(score_rows) > 0 else None
-        home_score = score_rows[1].select('td')[6].get_text(strip=True) if len(score_rows) > 1 else None
-
-        # Player Data:
-        player_table = soup.select_one('table#player_offense')
-        player_rows = player_table.select('tbody tr')
-        for row in player_rows:
-            name = row.select('th[data-stat="player"] a').get_text(strip=True)
-            team = row.select('td[data-stat="team"]').get_text(strip=True)
-            opponent = home_team if team == away_team else away_team
-            home_away = "home" if team == home_team else "away"
-            team_score = home_score if team == home_team else away_score
-            opp_score = away_score if team == home_team else home_score
-            
-            # Get snap count data from the appropriate team's table
-            snap_table_id = "home_snap_counts" if team == home_team else "vis_snap_counts"
-            snap_table = soup.select_one(f'table#{snap_table_id}')
-            if snap_table:
-                # Find the player's row in the snap count table
-                player_row = snap_table.find('a', string=lambda x: name in str(x))
-                if player_row:
-                    player_row = player_row.find_parent('tr')  # Get the full row
-                    
-                    pos = player_row.select_one('td[data-stat="pos"]').get_text(strip=True)
-                    snaps = player_row.select_one('td[data-stat="offense"]').get_text(strip=True).rstrip('%')
-                    snap_pct = player_row.select_one('td[data-stat="off_pct"]').get_text(strip=True).rstrip('%')
-                else:
-                    pos = None
-                    snaps = None
-                    snap_pct = None
-            else:
-                pos = None
-                snaps = None
-                snap_pct = None
-
-            pass_cmp = row.select('td[data-stat="pass_cmp"]').get_text(strip=True)
-            pass_att = row.select('td[data-stat="pass_att"]').get_text(strip=True)
-            pass_yds = row.select('td[data-stat="pass_yds"]').get_text(strip=True)
-            pass_tds = row.select('td[data-stat="pass_td"]').get_text(strip=True)
-            pass_int = row.select('td[data-stat="pass_int"]').get_text(strip=True)
-            pass_sack = row.select('td[data-stat="pass_sacked"]').get_text(strip=True)
-            rush_att = row.select('td[data-stat="rush_att"]').get_text(strip=True)
-            rush_yds = row.select('td[data-stat="rush_yds"]').get_text(strip=True)
-            rush_tds = row.select('td[data-stat="rush_td"]').get_text(strip=True)
-            targets = row.select('td[data-stat="targets"]').get_text(strip=True)
-            receptions = row.select('td[data-stat="rec"]').get_text(strip=True)
-            rec_yds = row.select('td[data-stat="rec_yds"]').get_text(strip=True)
-            rec_tds = row.select('td[data-stat="rec_td"]').get_text(strip=True)
-            fumbles = row.select('td[data-stat="fumbles"]').get_text(strip=True)
-
-            df = df.append({
-                'year': year,
-                'week': week,
-                'weather': weather,
-                'home_team': home_team,
-                'away_team': away_team,
-                'player': name,
-                'team': team,
-                'opponent': opponent,
-                'home_away': home_away,
-                'team_score': team_score,
-                'opp_score': opp_score,
-                'pos': pos,
-                'snaps': snaps,
-                'snap_pct': snap_pct,
-                'pass_cmp': pass_cmp,
-                'pass_att': pass_att,
-                'pass_yds': pass_yds,
-                'pass_tds': pass_tds,
-                'pass_int': pass_int,
-                'sacks': pass_sack,
-                'rush_att': rush_att,
-                'rush_yds': rush_yds,
-                'rush_tds': rush_tds,
-                'targets': targets,
-                'receptions': receptions,
-                'rec_yds': rec_yds,
-                'rec_tds': rec_tds,
-                'fumbles': fumbles
-            }, ignore_index=True)
-
+    # Player Data:
+    player_table = soup.select_one('table#player_offense')
+    player_rows = player_table.select('tbody tr')
+    for row in player_rows:
+        if 'thead' in row.get('class', []):
+            continue
+        player_dict = {
+            'year': year,
+            'week': week,
+            'weather': weather,
+            'home_team': home_team,
+            'away_team': away_team,
+            'player': row.select_one('th[data-stat="player"] a').get_text(strip=True) if row.select_one('th[data-stat="player"] a') else None,
+            'team': row.select_one('td[data-stat="team"]').get_text(strip=True),
+            'opponent': home_team if row.select_one('td[data-stat="team"]').get_text(strip=True) == away_team else away_team,
+            'home_away': "home" if row.select_one('td[data-stat="team"]').get_text(strip=True) == home_team else "away",
+            'team_score': home_score if row.select_one('td[data-stat="team"]').get_text(strip=True) == home_team else away_score,
+            'opp_score': away_score if row.select_one('td[data-stat="team"]').get_text(strip=True) == home_team else home_score,
+            'pos': None,
+            'snaps': None,
+            'snap_pct': None,
+            'pass_cmp': row.select_one('td[data-stat="pass_cmp"]').get_text(strip=True),
+            'pass_att': row.select_one('td[data-stat="pass_att"]').get_text(strip=True),
+            'pass_yds': row.select_one('td[data-stat="pass_yds"]').get_text(strip=True),
+            'pass_tds': row.select_one('td[data-stat="pass_td"]').get_text(strip=True),
+            'pass_int': row.select_one('td[data-stat="pass_int"]').get_text(strip=True),
+            'sacks': row.select_one('td[data-stat="pass_sacked"]').get_text(strip=True),
+            'rush_att': row.select_one('td[data-stat="rush_att"]').get_text(strip=True),
+            'rush_yds': row.select_one('td[data-stat="rush_yds"]').get_text(strip=True),
+            'rush_tds': row.select_one('td[data-stat="rush_td"]').get_text(strip=True),
+            'targets': row.select_one('td[data-stat="targets"]').get_text(strip=True),
+            'receptions': row.select_one('td[data-stat="rec"]').get_text(strip=True),
+            'rec_yds': row.select_one('td[data-stat="rec_yds"]').get_text(strip=True),
+            'rec_tds': row.select_one('td[data-stat="rec_td"]').get_text(strip=True),
+            'fumbles': row.select_one('td[data-stat="fumbles"]').get_text(strip=True)
+        }
+        # Snap count data
+        team = player_dict['team']
+        snap_table_id = "home_snap_counts" if team == home_team else "vis_snap_counts"
+        snap_table = soup.select_one(f'table#{snap_table_id}')
+        if snap_table:
+            player_row = snap_table.find('a', string=lambda x: player_dict['player'] in str(x))
+            if player_row:
+                player_row = player_row.find_parent('tr')
+                player_dict['pos'] = player_row.select_one('td[data-stat="pos"]').get_text(strip=True)
+                player_dict['snaps'] = player_row.select_one('td[data-stat="offense"]').get_text(strip=True).rstrip('%')
+                player_dict['snap_pct'] = player_row.select_one('td[data-stat="off_pct"]').get_text(strip=True).rstrip('%')
+        player_data.append(player_dict)
+    df = pd.DataFrame(player_data)
     return df
 
-
+def safe_get_game_data(driver, game_url, year, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            df = get_game_data(driver, game_url, year)
+            print(f"Successfully retrieved: {game_url}")
+            return df
+        except Exception as e:
+            logging.error(f"Attempt {attempt+1} failed for {game_url}: {e}")
+            print(f"Error fetching {game_url}, attempt {attempt+1}/{max_retries}")
+            time.sleep(random.uniform(2, 5))
+    print(f"Max retries hit for {game_url}. Re-initializing web driver and retrying once more.")
+    logging.error(f"Max retries hit for {game_url}. Re-initializing web driver and retrying once more.")
+    # Re-initialize driver and try one more time
+    new_driver = setupWebDriver()
+    try:
+        df = get_game_data(new_driver, game_url, year)
+        print(f"Successfully retrieved after re-initializing driver: {game_url}")
+        return df
+    except Exception as e:
+        print(f"Failed again after re-initializing driver for {game_url}. Exiting program.")
+        logging.error(f"Failed again after re-initializing driver for {game_url}: {e}")
+        exit(1)
 
 if __name__ == "__main__":
     """
@@ -199,8 +192,8 @@ if __name__ == "__main__":
         Return df
     """
     YEAR = 2024
-    BASE_URL = "https://www.pro-football-reference.com/"
-    SEASON_URL = BASE_URL + f"years/{YEAR}/games.htm"
+    BASE_URL = "https://www.pro-football-reference.com"
+    SEASON_URL = BASE_URL + f"/years/{YEAR}/games.htm"
 
     driver = setupWebDriver()
 
@@ -208,15 +201,23 @@ if __name__ == "__main__":
     game_links = get_game_links(soup)
 
     df_season = pd.DataFrame()
+    if game_links and len(game_links) > 0:
+        print(f"First game_link type: {type(game_links[0])}, value: {game_links[0]}")
     for link in game_links:
-        game_url = BASE_URL + link['href']
-        df_game = get_game_data(driver, game_url, YEAR)
-        df_season = pd.concat([df_season, df_game], ignore_index=True)
+        # Handle both Tag and string cases
+        if hasattr(link, 'attrs') and 'href' in link.attrs:
+            game_url = BASE_URL + link['href']
+        else:
+            game_url = BASE_URL + str(link)
+        print(f"Processing game_url: {game_url}")
+        df_game = safe_get_game_data(driver, game_url, YEAR)
+        if df_game is not None:
+            df_season = pd.concat([df_season, df_game], ignore_index=True)
+        # Best practice: wait between requests to avoid overwhelming the host
+        time.sleep(random.uniform(5, 10))
 
     os.makedirs('data', exist_ok=True)
     df_season.to_csv(f'data/game_data_{YEAR}.csv', index=False)
-
-    print(game_links)
 
 
 
