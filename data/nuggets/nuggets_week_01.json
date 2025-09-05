@@ -1,0 +1,202 @@
+[
+  {
+    "player": "Jahan Dotson",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 198,
+    "average": 24.4,
+    "line": 7.5,
+    "delta_pct": 224.8,
+    "nugget": "Jahan Dotson averages 24.4 reception_yds in 198 games, +224.8% vs Week 1 line of 7.5."
+  },
+  {
+    "player": "Parker Washington",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 108,
+    "average": 32.5,
+    "line": 13.5,
+    "delta_pct": 140.7,
+    "nugget": "Parker Washington averages 32.5 reception_yds in 108 games, +140.7% vs Week 1 line of 13.5."
+  },
+  {
+    "player": "Kareem Hunt",
+    "opponent": "Unknown",
+    "stat": "rush_yds",
+    "sample_size": 165,
+    "average": 49.2,
+    "line": 20.5,
+    "delta_pct": 140.1,
+    "nugget": "Kareem Hunt averages 49.2 rush_yds in 165 games, +140.1% vs Week 1 line of 20.5."
+  },
+  {
+    "player": "Najee Harris",
+    "opponent": "Unknown",
+    "stat": "rush_yds",
+    "sample_size": 217,
+    "average": 57.3,
+    "line": 24.5,
+    "delta_pct": 134.0,
+    "nugget": "Najee Harris averages 57.3 rush_yds in 217 games, +134.0% vs Week 1 line of 24.5."
+  },
+  {
+    "player": "Rico Dowdle",
+    "opponent": "Unknown",
+    "stat": "rush_yds",
+    "sample_size": 208,
+    "average": 51.8,
+    "line": 23.5,
+    "delta_pct": 120.4,
+    "nugget": "Rico Dowdle averages 51.8 rush_yds in 208 games, +120.4% vs Week 1 line of 23.5."
+  },
+  {
+    "player": "Russell Wilson",
+    "opponent": "Unknown",
+    "stat": "rush_yds",
+    "sample_size": 163,
+    "average": 18.4,
+    "line": 8.5,
+    "delta_pct": 116.7,
+    "nugget": "Russell Wilson averages 18.4 rush_yds in 163 games, +116.7% vs Week 1 line of 8.5."
+  },
+  {
+    "player": "Adam Thielen",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 146,
+    "average": 69.7,
+    "line": 32.5,
+    "delta_pct": 114.6,
+    "nugget": "Adam Thielen averages 69.7 reception_yds in 146 games, +114.6% vs Week 1 line of 32.5."
+  },
+  {
+    "player": "Alec Pierce",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 208,
+    "average": 45.0,
+    "line": 22.5,
+    "delta_pct": 100.0,
+    "nugget": "Alec Pierce averages 45.0 reception_yds in 208 games, +100.0% vs Week 1 line of 22.5."
+  },
+  {
+    "player": "Will Dissly",
+    "opponent": "Unknown",
+    "stat": "receptions",
+    "sample_size": 167,
+    "average": 3.0,
+    "line": 1.5,
+    "delta_pct": 98.8,
+    "nugget": "Will Dissly averages 3.0 receptions in 167 games, +98.8% vs Week 1 line of 1.5."
+  },
+  {
+    "player": "Jonnu Smith",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 217,
+    "average": 52.2,
+    "line": 26.5,
+    "delta_pct": 97.1,
+    "nugget": "Jonnu Smith averages 52.2 reception_yds in 217 games, +97.1% vs Week 1 line of 26.5."
+  },
+  {
+    "player": "Jonnu Smith",
+    "opponent": "Unknown",
+    "stat": "receptions",
+    "sample_size": 217,
+    "average": 4.9,
+    "line": 2.5,
+    "delta_pct": 96.1,
+    "nugget": "Jonnu Smith averages 4.9 receptions in 217 games, +96.1% vs Week 1 line of 2.5."
+  },
+  {
+    "player": "Justin Fields",
+    "opponent": "Unknown",
+    "stat": "pass_tds",
+    "sample_size": 138,
+    "average": 1.0,
+    "line": 0.5,
+    "delta_pct": 92.8,
+    "nugget": "Justin Fields averages 1.0 pass_tds in 138 games, +92.8% vs Week 1 line of 0.5."
+  },
+  {
+    "player": "Parker Washington",
+    "opponent": "Unknown",
+    "stat": "receptions",
+    "sample_size": 108,
+    "average": 2.7,
+    "line": 1.5,
+    "delta_pct": 77.8,
+    "nugget": "Parker Washington averages 2.7 receptions in 108 games, +77.8% vs Week 1 line of 1.5."
+  },
+  {
+    "player": "Chuba Hubbard",
+    "opponent": "Unknown",
+    "stat": "receptions",
+    "sample_size": 191,
+    "average": 2.7,
+    "line": 1.5,
+    "delta_pct": 77.0,
+    "nugget": "Chuba Hubbard averages 2.7 receptions in 191 games, +77.0% vs Week 1 line of 1.5."
+  },
+  {
+    "player": "Tyler Lockett",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 217,
+    "average": 39.7,
+    "line": 22.5,
+    "delta_pct": 76.5,
+    "nugget": "Tyler Lockett averages 39.7 reception_yds in 217 games, +76.5% vs Week 1 line of 22.5."
+  },
+  {
+    "player": "Zach Charbonnet",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 209,
+    "average": 16.6,
+    "line": 9.5,
+    "delta_pct": 75.1,
+    "nugget": "Zach Charbonnet averages 16.6 reception_yds in 209 games, +75.1% vs Week 1 line of 9.5."
+  },
+  {
+    "player": "Adam Thielen",
+    "opponent": "Unknown",
+    "stat": "receptions",
+    "sample_size": 146,
+    "average": 6.1,
+    "line": 3.5,
+    "delta_pct": 73.8,
+    "nugget": "Adam Thielen averages 6.1 receptions in 146 games, +73.8% vs Week 1 line of 3.5."
+  },
+  {
+    "player": "Will Dissly",
+    "opponent": "Unknown",
+    "stat": "reception_yds",
+    "sample_size": 167,
+    "average": 28.6,
+    "line": 16.5,
+    "delta_pct": 73.4,
+    "nugget": "Will Dissly averages 28.6 reception_yds in 167 games, +73.4% vs Week 1 line of 16.5."
+  },
+  {
+    "player": "Josh Jacobs",
+    "opponent": "Unknown",
+    "stat": "receptions",
+    "sample_size": 217,
+    "average": 2.5,
+    "line": 1.5,
+    "delta_pct": 68.4,
+    "nugget": "Josh Jacobs averages 2.5 receptions in 217 games, +68.4% vs Week 1 line of 1.5."
+  },
+  {
+    "player": "Ray Davis",
+    "opponent": "Unknown",
+    "stat": "rush_yds",
+    "sample_size": 144,
+    "average": 27.6,
+    "line": 16.5,
+    "delta_pct": 67.4,
+    "nugget": "Ray Davis averages 27.6 rush_yds in 144 games, +67.4% vs Week 1 line of 16.5."
+  }
+]
