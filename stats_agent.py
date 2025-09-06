@@ -518,12 +518,12 @@ def save_grok_insights(insights: Dict, week_number: int = 1) -> str:
     Returns:
         str: Path to saved insights file
     """
-    # Create insights directory
-    insights_dir = "data/insights"
-    os.makedirs(insights_dir, exist_ok=True)
+    # Create fun_stats directory
+    fun_stats_dir = "data/fun_stats"
+    os.makedirs(fun_stats_dir, exist_ok=True)
     
-    filename = f"grok_insights_week_{week_number:02d}.json"
-    filepath = os.path.join(insights_dir, filename)
+    filename = f"stats_insights_week_{week_number:02d}.json"
+    filepath = os.path.join(fun_stats_dir, filename)
     
     with open(filepath, 'w') as f:
         json.dump(insights, f, indent=2)
