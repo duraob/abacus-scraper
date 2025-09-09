@@ -179,29 +179,43 @@ class EnhancedNFLScraper:
             # Read the schedule CSV
             schedule_df = pd.read_csv(schedule_file)
             
-            # Convert date column to datetime
-            schedule_df['Date'] = pd.to_datetime(schedule_df['Date'], format='%d/%m/%Y %H:%M', errors='coerce')
+            # Convert date column to datetime (ISO format: YYYY-MM-DD)
+            schedule_df['Date'] = pd.to_datetime(schedule_df['Date'], format='%Y-%m-%d', errors='coerce')
             
             # Get today's date
             today = datetime.now().date()
             
-            # Find the current week
+            # Find the current week based on date ranges
             current_week = None
             
-            # Look for games today or in the future
-            future_games = schedule_df[schedule_df['Date'].dt.date >= today]
+            # Get unique weeks and their date ranges
+            week_ranges = {}
+            for week in schedule_df['Round Number'].unique():
+                week_games = schedule_df[schedule_df['Round Number'] == week]
+                min_date = week_games['Date'].min().date()
+                max_date = week_games['Date'].max().date()
+                week_ranges[week] = (min_date, max_date)
             
-            if not future_games.empty:
-                # Get the week of the next game
-                next_game = future_games.iloc[0]
-                current_week = next_game['Round Number']
-                game_date = next_game['Date'].date()
-                
-                logging.info(f"Found current week: {current_week} (next game: {game_date})")
-            else:
-                # If no future games, we're in the offseason, default to week 1
-                current_week = 1
-                logging.info("No future games found, defaulting to week 1")
+            # Find which week contains today's date
+            for week, (start_date, end_date) in week_ranges.items():
+                if start_date <= today <= end_date:
+                    current_week = week
+                    logging.info(f"Found current week: {week} (today {today} is between {start_date} and {end_date})")
+                    break
+            
+            # If today is before the season or between weeks, find the next week
+            if current_week is None:
+                future_games = schedule_df[schedule_df['Date'].dt.date >= today]
+                if not future_games.empty:
+                    # Get the week of the next game
+                    next_game = future_games.iloc[0]
+                    current_week = next_game['Round Number']
+                    game_date = next_game['Date'].date()
+                    logging.info(f"Today is between weeks, next week: {current_week} (next game: {game_date})")
+                else:
+                    # If no future games, we're in the offseason, default to week 1
+                    current_week = 1
+                    logging.info("No future games found, defaulting to week 1")
             
             # Cache the result
             self.save_to_cache(cache_key, current_week)
@@ -246,8 +260,8 @@ class EnhancedNFLScraper:
             week_games = []
             
             for _, game in week_games_df.iterrows():
-                # Convert date to proper format
-                game_date = pd.to_datetime(game['Date'], format='%d/%m/%Y %H:%M')
+                # Convert date to proper format (ISO format: YYYY-MM-DD)
+                game_date = pd.to_datetime(game['Date'], format='%Y-%m-%d')
                 
                 # Create game info dictionary
                 game_info = {

@@ -18,7 +18,8 @@ Raw Data Collection → Processing & Analysis → AI-Powered Insights → Bettin
 ## 📁 Project Files & Components
 
 ### Data Collection & Scraping
-- **`pfr_scraper.py`** - Main NFL game data scraper from Pro Football Reference
+- **`nfl_data.py`** - **NEW**: Optimized NFL game data scraper with undetected Chrome driver
+- **`pfr_scraper.py`** - Legacy NFL game data scraper from Pro Football Reference
 - **`odds.py`** - Betting odds collection from The Odds API
 
 ### Analysis & Projections
@@ -41,10 +42,26 @@ Raw Data Collection → Processing & Analysis → AI-Powered Insights → Bettin
 
 ### Step 1: Collect Fresh NFL Data
 ```bash
-# Scrape current season game data from Pro Football Reference
+# Scrape current season game data from Pro Football Reference (NEW OPTIMIZED VERSION)
+python nfl_data.py 2025
+
+# Or use legacy scraper
 python pfr_scraper.py
 ```
 **Output**: `data/game_data_2025.csv` - Complete player performance data
+
+**New Features in nfl_data.py**:
+- **Undetected Chrome Driver**: Bypasses Cloudflare protection
+- **Method-Based Architecture**: Clean, modular, testable functions
+- **Intelligent Caching**: 24-hour cache system for faster development
+- **Retry Logic**: Robust error handling with automatic retries
+- **Year Parameter**: Run with any year: `python nfl_data.py 2024`
+- **Target Format Compliance**: Output matches exact CSV structure
+- **Schedule-Based Scraping**: Efficient single-page approach vs team-by-team
+- **Mathematical Snap Counts**: Calculated from pass attempts + rushes
+- **Position Extraction**: Accurate player positions from snap count tables
+- **Clean Weather Data**: Proper weather text extraction from game info
+- **Team Assignment**: Correct player-to-team mapping
 
 ### Step 2: Generate Fantasy Projections
 ```bash
@@ -111,7 +128,19 @@ python stats_agent.py
 ### Prerequisites
 ```bash
 # Install required packages
-pip install pandas numpy selenium beautifulsoup4 requests xai-sdk openpyxl
+pip install pandas numpy selenium beautifulsoup4 requests xai-sdk openpyxl undetected-chromedriver
+```
+
+### Testing the New NFL Data Scraper
+```bash
+# Test basic functionality (recommended first)
+python nfl_data.py test
+
+# Scrape data for specific year
+python nfl_data.py 2024
+
+# Scrape current year (default)
+python nfl_data.py
 ```
 
 ### API Keys
