@@ -10,18 +10,15 @@ import os
 import pandas as pd
 import numpy as np
 import json
-import requests
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
+from dotenv import load_dotenv
+from xai_sdk import Client
+from xai_sdk.chat import user, system
 
-# Try to load environment variables
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    print("Loaded environment variables from .env file")
-except ImportError:
-    print("python-dotenv not installed. Install with: pip install python-dotenv")
-    print("Continuing without environment variables...")
+# Load environment variables
+load_dotenv()
+print("Loaded environment variables from .env file")
 
 
 # Configuration constants
@@ -31,18 +28,20 @@ MAX_NUGGETS = 20
 
 # GROK API Configuration
 GROK_API_KEY = os.getenv('GROK_API_KEY')
-GROK_API_URL = "https://api.x.ai/v1/chat/completions"  # Adjust URL if needed
-GROK_MODEL = "grok-4"  # Adjust model name if needed
+GROK_MODEL = "grok-3"  # Using grok-3 for consistency with picks_agent
 
 
-def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_data(week_number: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Load and normalize all required data sources.
+    
+    Args:
+        week_number (int): NFL week number to load data for
     
     Returns:
         tuple: (historical_stats, schedule, player_props)
     """
-    print("Loading data sources...")
+    print(f"Loading data sources for Week {week_number}...")
     
     # Load historical game data (all seasons)
     historical_stats = []
@@ -75,8 +74,8 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     schedule = pd.read_csv(schedule_file)
     schedule.columns = schedule.columns.str.lower().str.replace(' ', '_')
     
-    # Load player props (Week 1 for now)
-    props_file = os.path.join(data_dir, "odds", "week_01", "player_props_week_01.csv")
+    # Load player props for specified week
+    props_file = os.path.join(data_dir, "odds", f"week_{week_number:02d}", f"player_props_week_{week_number:02d}.csv")
     if not os.path.exists(props_file):
         raise FileNotFoundError(f"Player props file not found: {props_file}")
     
@@ -182,19 +181,45 @@ def get_stat_column(prop_type: str) -> Optional[str]:
     return prop_mapping.get(prop_type)
 
 
+def extract_opponent_from_props(prop: pd.Series) -> str:
+    """
+    Extract opponent team from player props data.
+    
+    Args:
+        prop: Single row from player props dataframe
+    
+    Returns:
+        str: Opponent team name
+    """
+    # Get home and away teams from the prop data
+    home_team = prop.get('home_team', '')
+    away_team = prop.get('away_team', '')
+    
+    # For now, we'll use a simple approach - determine opponent based on team context
+    # This could be enhanced with more sophisticated team matching logic
+    if home_team and away_team:
+        # Return the opponent team (this is a simplified approach)
+        # In a real implementation, you'd need to determine which team the player is on
+        return f"{away_team} vs {home_team}"
+    
+    return "Unknown"
+
+
 def compute_trends(filtered_props: pd.DataFrame, 
-                  historical_stats: pd.DataFrame) -> List[Dict]:
+                  historical_stats: pd.DataFrame,
+                  week_number: int) -> List[Dict]:
     """
     Compute player trends for each prop.
     
     Args:
         filtered_props: Filtered player props
         historical_stats: Historical game stats
+        week_number: Current week number for context
     
     Returns:
         list: List of trend dictionaries
     """
-    print("Computing player trends...")
+    print(f"Computing player trends for Week {week_number}...")
     
     trends = []
     
@@ -213,9 +238,8 @@ def compute_trends(filtered_props: pd.DataFrame,
         if player_data.empty:
             continue
         
-        # Get opponent from schedule (simplified - would need proper game matching)
-        # For now, we'll use a placeholder approach
-        opponent = "Unknown"  # This would need proper game matching logic
+        # Extract opponent from props data
+        opponent = extract_opponent_from_props(prop)
         
         # Calculate career average for this stat
         if prop_type == 'anytime_td':
@@ -226,8 +250,8 @@ def compute_trends(filtered_props: pd.DataFrame,
             career_avg = player_data[stat_col].fillna(0).mean()
         
         # Calculate last 3 games vs opponent (if available)
-        # This would need proper opponent matching logic
-        last_3_vs_opponent = career_avg  # Placeholder
+        # For now, use career average as placeholder - could be enhanced with opponent-specific data
+        last_3_vs_opponent = career_avg
         
         # Calculate last 5 overall games (form check)
         last_5_games = player_data.tail(5)[stat_col].fillna(0).mean()
@@ -245,7 +269,8 @@ def compute_trends(filtered_props: pd.DataFrame,
                 'last_3_vs_opponent': last_3_vs_opponent,
                 'last_5_games': last_5_games,
                 'line': line,
-                'stat_column': stat_col
+                'stat_column': stat_col,
+                'week': week_number
             }
             trends.append(trend_data)
     
@@ -281,6 +306,7 @@ def generate_nuggets(trends: List[Dict]) -> List[Dict]:
         # Use career average for now (could be enhanced with opponent-specific data)
         average = trend['career_avg']
         line = trend['line']
+        week_number = trend.get('week', 1)
         
         # Calculate delta and percentage
         delta = average - line
@@ -296,7 +322,8 @@ def generate_nuggets(trends: List[Dict]) -> List[Dict]:
                 'average': round(average, 1),
                 'line': line,
                 'delta_pct': round(delta_pct, 1),
-                'nugget': f"{trend['player']} averages {average:.1f} {trend['stat']} in {trend['sample_size']} games, {delta_pct:+.1f}% vs Week 1 line of {line}."
+                'week': week_number,
+                'nugget': f"{trend['player']} averages {average:.1f} {trend['stat']} in {trend['sample_size']} games, {delta_pct:+.1f}% vs Week {week_number} line of {line}."
             }
             nuggets.append(nugget)
     
@@ -402,7 +429,7 @@ Return your analysis as a list of ESPN-style insights."""
 
 def call_grok_api(nuggets_data: List[Dict]) -> Dict:
     """
-    Call GROK API to analyze nuggets and generate ESPN-style insights.
+    Call GROK API using X.AI SDK to analyze nuggets and generate ESPN-style insights.
     
     Args:
         nuggets_data: List of nugget dictionaries
@@ -417,93 +444,62 @@ def call_grok_api(nuggets_data: List[Dict]) -> Dict:
     
     print("🤖 Calling GROK API for ESPN-style analysis...")
     
-    # Prepare the prompt for GROK
-    grok_prompt = f"""You are an ESPN sports analytics writer. 
-You are given structured NFL trend nuggets in JSON. 
+    try:
+        # Initialize X.AI client
+        client = Client(api_key=GROK_API_KEY)
+        
+        # Create a conversation
+        chat = client.chat.create(model=GROK_MODEL)
+        
+        # Get week number from the first nugget for context
+        week_number = nuggets_data[0].get('week', 1) if nuggets_data else 1
+        
+        # Prepare the prompt for GROK
+        grok_prompt = f"""You are an ESPN sports analytics writer. 
+You are given structured NFL trend nuggets in JSON for Week {week_number}. 
 Rewrite each nugget as a short, headline-style betting insight. 
 - Keep it one sentence each. 
 - Make it punchy and fan-friendly. 
 - Always connect to the posted prop line. 
-- Example: "Derrick Henry has punished the Ravens, averaging 122 rushing yards in 5 career games — well above his Week 1 line of 89.5."
+- Example: "Derrick Henry has punished the Ravens, averaging 122 rushing yards in 5 career games — well above his Week {week_number} line of 89.5."
 
 Here are the nuggets to analyze:
 {json.dumps(nuggets_data, indent=2)}
 
 Return your analysis as a JSON list of ESPN-style insights."""
 
-    # Prepare the API request
-    headers = {
-        "Authorization": f"Bearer {GROK_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": GROK_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": grok_prompt
-            }
-        ],
-        "max_tokens": 2000,
-        "temperature": 0.7
-    }
-    
-    try:
-        print(f"📡 Sending request to GROK API...")
-        response = requests.post(GROK_API_URL, headers=headers, json=payload, timeout=30)
+        # Add system message and user prompt
+        chat.append(system("You are an ESPN sports analytics writer specializing in NFL betting insights."))
+        chat.append(user(grok_prompt))
         
-        if response.status_code == 200:
-            result = response.json()
-            print("✅ GROK API call successful")
-            
-            # Extract the response content
-            if 'choices' in result and len(result['choices']) > 0:
-                content = result['choices'][0]['message']['content']
-                print("📝 GROK Response:")
-                print(content)
-                
-                # Try to parse JSON response
-                try:
-                    parsed_response = json.loads(content)
-                    return {
-                        "success": True,
-                        "insights": parsed_response,
-                        "raw_response": content
-                    }
-                except json.JSONDecodeError:
-                    # If not JSON, return as text
-                    return {
-                        "success": True,
-                        "insights": [content],
-                        "raw_response": content
-                    }
-            else:
-                return {
-                    "success": False,
-                    "error": "No response content from GROK API",
-                    "raw_response": result
-                }
-        else:
-            print(f"❌ GROK API error: {response.status_code}")
-            print(f"Response: {response.text}")
+        print(f"📡 Sending request to GROK API...")
+        response = chat.sample()
+        
+        print("✅ GROK API call successful")
+        print("📝 GROK Response:")
+        print(response.content)
+        
+        # Try to parse JSON response
+        try:
+            parsed_response = json.loads(response.content)
             return {
-                "success": False,
-                "error": f"API error {response.status_code}",
-                "raw_response": response.text
+                "success": True,
+                "insights": parsed_response,
+                "raw_response": response.content
+            }
+        except json.JSONDecodeError:
+            # If not JSON, return as text
+            return {
+                "success": True,
+                "insights": [response.content],
+                "raw_response": response.content
             }
             
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Request error: {e}")
-        return {
-            "success": False,
-            "error": f"Request error: {str(e)}"
-        }
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"❌ GROK API error: {e}")
         return {
             "success": False,
-            "error": f"Unexpected error: {str(e)}"
+            "error": f"GROK API request failed: {str(e)}"
         }
 
 
@@ -546,7 +542,7 @@ def main(week_number: int = 1) -> Tuple[List[Dict], str]:
     
     try:
         # 1. Load and normalize data
-        historical_stats, schedule, player_props = load_data()
+        historical_stats, schedule, player_props = load_data(week_number)
         
         # 2. Create player mapping
         player_mapping = create_player_mapping()
@@ -557,7 +553,7 @@ def main(week_number: int = 1) -> Tuple[List[Dict], str]:
         )
         
         # 4. Compute player trends
-        trends = compute_trends(filtered_props, historical_stats)
+        trends = compute_trends(filtered_props, historical_stats, week_number)
         
         # 5. Generate nuggets
         raw_nuggets = generate_nuggets(trends)
@@ -595,5 +591,17 @@ def main(week_number: int = 1) -> Tuple[List[Dict], str]:
 
 
 if __name__ == "__main__":
-    # Run for Week 1 by default
-    main(1)
+    import sys
+    
+    # Parse command line arguments
+    week_number = 1  # Default to Week 1
+    if len(sys.argv) > 1:
+        try:
+            week_number = int(sys.argv[1])
+        except ValueError:
+            print(f"Invalid week number: {sys.argv[1]}")
+            print("Usage: python stats_agent.py [week_number]")
+            print("Example: python stats_agent.py 2")
+            sys.exit(1)
+    
+    main(week_number)

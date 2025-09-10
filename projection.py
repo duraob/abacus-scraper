@@ -142,52 +142,58 @@ def build_team_statistics(df_game_data):
     Returns:
         DataFrame with team-level time-weighted aggregated stats per game
     """
-    # Apply time weights to all stats before aggregation
-    df_weighted = df_game_data.copy()
+    # Apply proper time-weighted aggregation using normalized weights
     stat_columns = ['pass_cmp', 'pass_att', 'pass_yds', 'pass_tds', 'pass_int', 'sacks',
                    'rush_att', 'rush_yds', 'rush_tds', 'targets', 'receptions', 'rec_yds', 'rec_tds', 'fumbles']
     
-    for col in stat_columns:
-        df_weighted[col] = df_weighted[col] * df_weighted['time_weight']
+    def weighted_average(group, stat_col, weight_col):
+        """Calculate weighted average for a stat column using time weights"""
+        if group[weight_col].sum() == 0:
+            return 0
+        return np.average(group[stat_col], weights=group[weight_col])
     
-    # Group by team, opponent, week and aggregate time-weighted offensive stats
+    # Group by team, opponent, week and calculate weighted averages for offensive stats
     # These represent the team's offensive performance in each game
-    team_stats = df_weighted.groupby(['team', 'opponent', 'week']).agg({
-        'pass_cmp': 'sum',
-        'pass_att': 'sum',
-        'pass_yds': 'sum', 
-        'pass_tds': 'sum',
-        'pass_int': 'sum',
-        'sacks': 'sum',
-        'rush_att': 'sum',
-        'rush_yds': 'sum',
-        'rush_tds': 'sum',
-        'targets': 'sum',
-        'receptions': 'sum',
-        'rec_yds': 'sum',
-        'rec_tds': 'sum',
-        'fumbles': 'sum'
-    }).reset_index()
+    team_stats = df_game_data.groupby(['team', 'opponent', 'week']).apply(
+        lambda group: pd.Series({
+            'pass_cmp': weighted_average(group, 'pass_cmp', 'time_weight'),
+            'pass_att': weighted_average(group, 'pass_att', 'time_weight'),
+            'pass_yds': weighted_average(group, 'pass_yds', 'time_weight'),
+            'pass_tds': weighted_average(group, 'pass_tds', 'time_weight'),
+            'pass_int': weighted_average(group, 'pass_int', 'time_weight'),
+            'sacks': weighted_average(group, 'sacks', 'time_weight'),
+            'rush_att': weighted_average(group, 'rush_att', 'time_weight'),
+            'rush_yds': weighted_average(group, 'rush_yds', 'time_weight'),
+            'rush_tds': weighted_average(group, 'rush_tds', 'time_weight'),
+            'targets': weighted_average(group, 'targets', 'time_weight'),
+            'receptions': weighted_average(group, 'receptions', 'time_weight'),
+            'rec_yds': weighted_average(group, 'rec_yds', 'time_weight'),
+            'rec_tds': weighted_average(group, 'rec_tds', 'time_weight'),
+            'fumbles': weighted_average(group, 'fumbles', 'time_weight')
+        })
+    ).reset_index()
     
     # Calculate defensive stats by aggregating opponent's offensive performance with time weighting
     # When we group by opponent, we're getting the opponent's offensive stats
     # These become our defensive stats (how well we defended against them)
-    opponent_offensive_stats = df_weighted.groupby(['opponent', 'team', 'week']).agg({
-        'pass_cmp': 'sum',
-        'pass_att': 'sum',
-        'pass_yds': 'sum',
-        'pass_tds': 'sum', 
-        'pass_int': 'sum',
-        'sacks': 'sum',
-        'rush_att': 'sum',
-        'rush_yds': 'sum',
-        'rush_tds': 'sum',
-        'targets': 'sum',
-        'receptions': 'sum',
-        'rec_yds': 'sum',
-        'rec_tds': 'sum',
-        'fumbles': 'sum'
-    }).reset_index()
+    opponent_offensive_stats = df_game_data.groupby(['opponent', 'team', 'week']).apply(
+        lambda group: pd.Series({
+            'pass_cmp': weighted_average(group, 'pass_cmp', 'time_weight'),
+            'pass_att': weighted_average(group, 'pass_att', 'time_weight'),
+            'pass_yds': weighted_average(group, 'pass_yds', 'time_weight'),
+            'pass_tds': weighted_average(group, 'pass_tds', 'time_weight'),
+            'pass_int': weighted_average(group, 'pass_int', 'time_weight'),
+            'sacks': weighted_average(group, 'sacks', 'time_weight'),
+            'rush_att': weighted_average(group, 'rush_att', 'time_weight'),
+            'rush_yds': weighted_average(group, 'rush_yds', 'time_weight'),
+            'rush_tds': weighted_average(group, 'rush_tds', 'time_weight'),
+            'targets': weighted_average(group, 'targets', 'time_weight'),
+            'receptions': weighted_average(group, 'receptions', 'time_weight'),
+            'rec_yds': weighted_average(group, 'rec_yds', 'time_weight'),
+            'rec_tds': weighted_average(group, 'rec_tds', 'time_weight'),
+            'fumbles': weighted_average(group, 'fumbles', 'time_weight')
+        })
+    ).reset_index()
     
     # Custom mapping: Opponent's offensive stats become our defensive stats
     # This represents how well our defense performed against the opponent's offense
@@ -538,31 +544,35 @@ def create_player_dataset_from_game_data(df_game_data, active_roster, player_tea
     if df_filtered.empty:
         raise ValueError("No active players found in game data. Check name matching between roster and game data.")
     
-    # Apply time weights to all stats before aggregation
-    df_filtered_weighted = df_filtered.copy()
+    # Apply proper time-weighted aggregation using normalized weights
     stat_columns = ['pass_cmp', 'pass_att', 'pass_yds', 'pass_tds', 'pass_int', 'sacks',
                    'rush_att', 'rush_yds', 'rush_tds', 'targets', 'receptions', 'rec_yds', 'rec_tds', 'fumbles']
     
-    for col in stat_columns:
-        df_filtered_weighted[col] = df_filtered_weighted[col] * df_filtered_weighted['time_weight']
+    def weighted_average(group, stat_col, weight_col):
+        """Calculate weighted average for a stat column using time weights"""
+        if group[weight_col].sum() == 0:
+            return 0
+        return np.average(group[stat_col], weights=group[weight_col])
     
-    # Group by player only (not by team) to consolidate all team performances
-    player_stats = df_filtered_weighted.groupby('player').agg({
-        'pass_cmp': 'sum',
-        'pass_att': 'sum',
-        'pass_yds': 'sum',
-        'pass_tds': 'sum',
-        'pass_int': 'sum',
-        'sacks': 'sum',
-        'rush_att': 'sum',
-        'rush_yds': 'sum',
-        'rush_tds': 'sum',
-        'targets': 'sum',
-        'receptions': 'sum',
-        'rec_yds': 'sum',
-        'rec_tds': 'sum',
-        'fumbles': 'sum'
-    }).reset_index()
+    # Group by player and calculate weighted averages for each stat
+    player_stats = df_filtered.groupby('player').apply(
+        lambda group: pd.Series({
+            'pass_cmp': weighted_average(group, 'pass_cmp', 'time_weight'),
+            'pass_att': weighted_average(group, 'pass_att', 'time_weight'),
+            'pass_yds': weighted_average(group, 'pass_yds', 'time_weight'),
+            'pass_tds': weighted_average(group, 'pass_tds', 'time_weight'),
+            'pass_int': weighted_average(group, 'pass_int', 'time_weight'),
+            'sacks': weighted_average(group, 'sacks', 'time_weight'),
+            'rush_att': weighted_average(group, 'rush_att', 'time_weight'),
+            'rush_yds': weighted_average(group, 'rush_yds', 'time_weight'),
+            'rush_tds': weighted_average(group, 'rush_tds', 'time_weight'),
+            'targets': weighted_average(group, 'targets', 'time_weight'),
+            'receptions': weighted_average(group, 'receptions', 'time_weight'),
+            'rec_yds': weighted_average(group, 'rec_yds', 'time_weight'),
+            'rec_tds': weighted_average(group, 'rec_tds', 'time_weight'),
+            'fumbles': weighted_average(group, 'fumbles', 'time_weight')
+        })
+    ).reset_index()
     
     # Rename columns to match analyze function expectations exactly
     player_stats = player_stats.rename(columns={
@@ -599,6 +609,29 @@ def create_player_dataset_from_game_data(df_game_data, active_roster, player_tea
     player_complete = player_complete[player_complete['team'] != 0.0]
     
     print(f"Final player dataset size: {len(player_complete)} players (consolidated by current team)")
+    
+    # Validation: Check for unrealistic projections and log warnings
+    validation_warnings = []
+    
+    # Check QB pass attempts (should be 15-50 per game)
+    qb_players = player_complete[player_complete['name'].str.contains('QB|Quarterback', case=False, na=False)]
+    if not qb_players.empty:
+        low_pass_att = qb_players[qb_players['pass_att'] < 15]
+        high_pass_att = qb_players[qb_players['pass_att'] > 50]
+        
+        if not low_pass_att.empty:
+            validation_warnings.append(f"WARNING: {len(low_pass_att)} QBs with unusually low pass attempts (<15): {low_pass_att['name'].tolist()[:3]}")
+        if not high_pass_att.empty:
+            validation_warnings.append(f"WARNING: {len(high_pass_att)} QBs with unusually high pass attempts (>50): {high_pass_att['name'].tolist()[:3]}")
+    
+    # Check for negative values
+    negative_stats = player_complete[(player_complete[['pass_att', 'rush_att', 'tar']] < 0).any(axis=1)]
+    if not negative_stats.empty:
+        validation_warnings.append(f"WARNING: {len(negative_stats)} players with negative stats: {negative_stats['name'].tolist()[:3]}")
+    
+    # Log validation warnings
+    for warning in validation_warnings:
+        print(warning)
     
     # Keep name as a regular column - let analyze function handle index management
     return player_complete
@@ -753,10 +786,11 @@ def analyze(df_team, df_players, projection_week=1):
     df_player_avg["rec_yd"] = df_player_avg["rec_yd"] / df_player_avg["tar"].replace(0, 0.0001)
     df_player_avg["rec_td"] = df_player_avg["rec_td"] / df_player_avg["tar"].replace(0, 0.0001)
     df_player_avg["fum"] = df_player_avg["fum"] / (df_player_avg["tar"] + df_player_avg["rush_att"]).replace(0, 0.0001)
-    # ATTS
-    df_player_avg["tar"] = df_player_avg["tar"] / df_player_avg["g"].replace(0, 0.0001)
-    df_player_avg["pass_att"] = df_player_avg["pass_att"] / df_player_avg["g"].replace(0, 0.0001)
-    df_player_avg["rush_att"] = df_player_avg["rush_att"] / df_player_avg["g"].replace(0, 0.0001)
+    # ATTS - Note: pass_att, rush_att, and tar are already per-game averages from weighted aggregation
+    # No need to divide by games since create_player_dataset_from_game_data() now provides per-game weighted averages
+    df_player_avg["tar"] = df_player_avg["tar"]  # Already per-game average
+    df_player_avg["pass_att"] = df_player_avg["pass_att"]  # Already per-game average  
+    df_player_avg["rush_att"] = df_player_avg["rush_att"]  # Already per-game average
     
     # Clean up any infinite values that may have been created
     df_player_avg = df_player_avg.replace([np.inf, -np.inf], 0)
@@ -948,9 +982,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         if sys.argv[1] == "--week":
             # Specify current week: python projection.py --week 2
-            if len(sys.argv) > 2:
+        if len(sys.argv) > 2:
                 current_week = int(sys.argv[2])
-            else:
+        else:
                 print("Usage: python projection.py --week <week_number>")
                 print("Example: python projection.py --week 2")
                 sys.exit(1)
@@ -958,9 +992,9 @@ if __name__ == "__main__":
             # Legacy support: python projection.py --time-weighted schedule.csv week
             if len(sys.argv) > 2:
                 schedule_file = sys.argv[2]
-            if len(sys.argv) > 3:
+        if len(sys.argv) > 3:
                 current_week = int(sys.argv[3])
-        else:
+    else:
             # Assume first argument is week number: python projection.py 2
             try:
                 current_week = int(sys.argv[1])

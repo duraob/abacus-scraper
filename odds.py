@@ -125,7 +125,7 @@ class OddsScraper:
         """
         try:
             # Read the NFL schedule CSV
-            schedule_path = 'nfl2025sched.csv'
+            schedule_path = 'data/nfl-2025-EasternStandardTime.csv'
             
             if not os.path.exists(schedule_path):
                 logging.error(f"NFL schedule CSV not found at: {schedule_path}")
@@ -135,14 +135,14 @@ class OddsScraper:
             schedule_df = pd.read_csv(schedule_path)
             
             # Filter for the specific week
-            week_matchups = schedule_df[schedule_df['Week'] == week].copy()
+            week_matchups = schedule_df[schedule_df['Round Number'] == week].copy()
             
             if week_matchups.empty:
                 logging.warning(f"No matchups found in schedule for Week {week}, {year}")
                 return {'start': None, 'end': None}
             
             # Get start (earliest) and end (latest) dates for the week
-            week_dates = pd.to_datetime(week_matchups['Date'], format='%m/%d/%Y')
+            week_dates = pd.to_datetime(week_matchups['Date'])
             start_date = week_dates.min()
             end_date = week_dates.max() + timedelta(days=1)  # Include full day
             
@@ -331,22 +331,27 @@ class OddsScraper:
         df = pd.DataFrame(player_props)
         return df
     
-    def scrape_current_week_odds(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def scrape_week_odds(self, week: int = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Main method to scrape current week odds (team + player props).
+        Main method to scrape odds for a specific week (team + player props).
         Organizes output into weekly folders based on NFL schedule.
+        
+        Args:
+            week (int, optional): Specific week to scrape. If None, uses current week.
         
         Returns:
             Tuple[pd.DataFrame, pd.DataFrame]: Team odds and player props DataFrames
         """
-        logging.info("Starting current week odds scrape...")
+        if week is None:
+            # Determine current NFL week
+            target_week = self.get_current_nfl_week()
+            logging.info(f"Auto-detected current NFL week: {target_week}")
+        else:
+            target_week = week
+            logging.info(f"Scraping odds for specified week: {target_week}")
         
-        # Determine current NFL week
-        current_week = self.get_current_nfl_week()
-        logging.info(f"Current NFL week: {current_week}")
-        
-        # Get current week dates from NFL schedule
-        week_dates = self._get_week_dates_from_csv(current_week, 2025)
+        # Get week dates from NFL schedule
+        week_dates = self._get_week_dates_from_csv(target_week, 2025)
         if not week_dates['start'] or not week_dates['end']:
             logging.warning("Could not determine week dates, using fallback")
             # Fallback to Thursday-Monday calculation
@@ -389,19 +394,29 @@ class OddsScraper:
         player_props_df = pd.concat(all_player_props, ignore_index=True) if all_player_props else pd.DataFrame()
         
         # Save to weekly directory with organized file names
-        week_dir = self.get_weekly_directory(current_week)
+        week_dir = self.get_weekly_directory(target_week)
         
         if not team_odds_df.empty:
-            team_file = os.path.join(week_dir, f'team_odds_week_{current_week:02d}.csv')
+            team_file = os.path.join(week_dir, f'team_odds_week_{target_week:02d}.csv')
             team_odds_df.to_csv(team_file, index=False)
             logging.info(f"Saved {len(team_odds_df)} team odds records to {team_file}")
         
         if not player_props_df.empty:
-            props_file = os.path.join(week_dir, f'player_props_week_{current_week:02d}.csv')
+            props_file = os.path.join(week_dir, f'player_props_week_{target_week:02d}.csv')
             player_props_df.to_csv(props_file, index=False)
             logging.info(f"Saved {len(player_props_df)} player prop records to {props_file}")
         
         return team_odds_df, player_props_df
+
+    def scrape_current_week_odds(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Legacy method for backward compatibility.
+        Scrapes current week odds automatically.
+        
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame]: Team odds and player props DataFrames
+        """
+        return self.scrape_week_odds(week=None)
     
     def test_api_connection(self) -> bool:
         """
@@ -415,14 +430,14 @@ class OddsScraper:
             data, headers = self.make_request("/sports")
             
             if data is not None:
-                logging.info("✅ API connection successful!")
+                logging.info("API connection SUCCESSFUL!")
                 return True
             else:
-                logging.error("❌ API connection failed")
+                logging.error("API connection FAILED")
                 return False
                 
         except Exception as e:
-            logging.error(f"❌ API connection test failed: {e}")
+            logging.error(f"API connection test FAILED: {e}")
             return False
     
     def get_usage_info(self) -> Dict:
@@ -461,19 +476,19 @@ class OddsScraper:
             int: Current NFL week number (1-18 for regular season)
         """
         try:
-            schedule_df = pd.read_csv('nfl2025sched.csv')
+            schedule_df = pd.read_csv('data/nfl-2025-EasternStandardTime.csv')
             schedule_df['Date'] = pd.to_datetime(schedule_df['Date'])
             
             today = datetime.now().date()
             
             # Find the next week that hasn't started yet
-            for week in sorted(schedule_df['Week'].unique()):
-                week_dates = schedule_df[schedule_df['Week'] == week]['Date'].dt.date
+            for week in sorted(schedule_df['Round Number'].unique()):
+                week_dates = schedule_df[schedule_df['Round Number'] == week]['Date'].dt.date
                 if min(week_dates) > today:
                     return week - 1  # Return the current week
             
             # If we're past all weeks, return the last week
-            return schedule_df['Week'].max()
+            return schedule_df['Round Number'].max()
             
         except Exception as e:
             logging.error(f"Error determining NFL week: {e}")
@@ -493,19 +508,29 @@ class OddsScraper:
         os.makedirs(week_dir, exist_ok=True)
         return week_dir
 
-def main():
-    """Main execution function"""
+def main(week: int = None):
+    """
+    Main execution function
+    
+    Args:
+        week (int, optional): Specific week to scrape. If None, auto-detects current week.
+    """
     print("=== NFL Odds Scraper ===")
+    
+    if week:
+        print(f"Scraping odds for Week {week}")
+    else:
+        print("Auto-detecting current week")
     
     try:
         scraper = OddsScraper()
         
         # Test API connection first
         if not scraper.test_api_connection():
-            print("❌ API connection failed. Please check your API key and internet connection.")
+            print("API connection FAILED. Please check your API key and internet connection.")
             return
         
-        print("✅ API connection successful!")
+        print("API connection SUCCESSFUL!")
         
         # Check usage
         usage = scraper.get_usage_info()
@@ -515,8 +540,8 @@ def main():
         monthly_usage = scraper.get_monthly_usage()
         print(f"Monthly Usage: {monthly_usage['requests_used']}/{monthly_usage['monthly_limit']} ({monthly_usage['usage_percentage']:.1f}%)")
         
-        # Scrape current week odds
-        team_odds, player_props = scraper.scrape_current_week_odds()
+        # Scrape odds for specified week or current week
+        team_odds, player_props = scraper.scrape_week_odds(week=week)
         
         print(f"\nResults:")
         print(f"Team Odds: {len(team_odds)} records")
@@ -539,4 +564,18 @@ def main():
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    # Parse command line arguments
+    week = None
+    if len(sys.argv) > 1:
+        try:
+            week = int(sys.argv[1])
+            print(f"Scraping odds for Week {week}")
+        except ValueError:
+            print(f"Invalid week number: {sys.argv[1]}")
+            print("Usage: python odds.py [week_number]")
+            print("Example: python odds.py 2")
+            sys.exit(1)
+    
+    main(week=week)
