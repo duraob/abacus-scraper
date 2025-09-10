@@ -1,6 +1,7 @@
 # Project Progress
 
 ## Current State
+- **NEW**: **COMPLETED**: Time-Weighted NFL Projection Engine (projection.py) - Uses last 10 games with time decay weighting
 - **NEW**: **COMPLETED**: Optimized NFL Data Scraper (nfl_data.py) - Method-based architecture with undetected Chrome driver and full data quality fixes
 - Basic web scraping functionality implemented using Selenium and BeautifulSoup4
 - Added file-based caching system to optimize testing and development
@@ -15,6 +16,48 @@
 - **NEW**: **COMPLETED**: Active Roster Filtering for NFL Projections (nfl_proj.py) - Eliminates noise from inactive/injured players
 
 ## Recent Accomplishments
+
+### Weekly Progression NFL Projection Engine - COMPLETED ✅
+**File**: `projection.py`
+
+**Key Features Implemented:**
+- **Week-Based Data Selection**: Automatically selects appropriate historical data based on projection week
+- **Time-Weighted Analysis**: Uses most recent 10 games with exponential time decay weighting
+- **Recent Performance Emphasis**: Most recent games get highest weight (1.0), older games decay to 0.1
+- **Dynamic Data Mixing**: 
+  - Week 1: 10 games from 2024 (no 2025 data yet)
+  - Week 2: 9 games from 2024 + 1 game from 2025
+  - Week 3+: Available 2025 weeks + remaining from 2024
+- **Weighted Aggregation**: All team and player statistics use time-weighted calculations
+- **Clean Architecture**: Straightforward implementation without backward compatibility complexity
+
+**Technical Implementation:**
+- **`create_time_weighted_dataset_dynamic()`**: Dynamically selects data based on projection week
+- **Enhanced `build_team_statistics()`**: Applies time weights to all team-level aggregations
+- **Enhanced `create_player_dataset_from_game_data()`**: Applies time weights to player statistics and consolidates by current team
+- **`create_player_team_mapping()`**: Maps players to their current team from master roster
+- **`run_with_time_weighted_data()`**: Main function for time-weighted projections
+- **Parameter-Based Filename Generation**: Creates separate files for each week (week1, week2, etc.)
+
+**Output Quality:**
+- **Week 1**: 371 active players using 10 games from 2024 (consolidated by current team)
+- **Week 2**: 427 active players using 9 games from 2024 + 1 from 2025 (consolidated by current team)
+- **32 teams** with time-weighted statistics (data quality fixed)
+- **Complete Schedule Integration**: Updated to use `data/nfl-2025-EasternStandardTime.csv` with all 18 weeks
+- **Opponent Determination**: Week 2+ projections now properly determine next opponents for matchup-based adjustments
+- **Player Consolidation**: Players who switched teams (e.g., Aaron Rodgers: NYJ→PIT) appear only once with their current team
+- **Recent trends emphasized** - 2025 Week 1 has 10x more influence than 2024 Week 9
+- **Performance trends captured** - recent form has higher impact on projections
+- **Data integrity maintained** - all existing functionality preserved
+
+**Usage Examples:**
+```bash
+# Default time-weighted projections (2025 Week 1 + 2024 Weeks 9-17)
+python projection.py
+
+# With custom schedule and week
+python projection.py --time-weighted data/nfl-2025-EasternStandardTime.csv 1
+```
 
 ### Optimized NFL Data Scraper - COMPLETED ✅
 **File**: `nfl_data.py`
@@ -224,7 +267,44 @@ python nfl_data.py
 
 ## Testing Instructions
 
-### Test the Latest Task (Optimized NFL Data Scraper - nfl_data.py)
+### Test the Latest Task (Weekly Progression NFL Projection Engine - projection.py)
+```bash
+# Test Week 1 projections (10 games from 2024)
+python projection.py 1
+
+# Expected output:
+# - Week 1 projections: Using 10 games from 2024 data
+# - Including 2025 weeks: []
+# - Including 2024 weeks: [17, 16, 15, 14, 13, 12, 11, 10, 9]
+# - Combined dataset: 2,620 total records
+# - Time weights: 2024 Week 17 = 1.0, Week 16 = 0.9, ..., Week 9 = 0.2
+# - Creates team dataset with 32 teams
+# - Creates player dataset with 371 active players (consolidated by current team)
+# - Saves projections to data/projections/nfl25_proj_week1.csv
+
+# Test Week 2 projections (9 games from 2024 + 1 from 2025)
+python projection.py 2
+
+# Expected output:
+# - Week 2 projections: Using 9 games from 2024 + 1 game from 2025
+# - Including 2025 weeks: [1]
+# - Including 2024 weeks: [17, 16, 15, 14, 13, 12, 11, 10, 9]
+# - Combined dataset: 2,932 total records
+# - Time weights: 2025 Week 1 = 1.0, 2024 Week 17 = 0.9, ..., Week 9 = 0.1
+# - Creates team dataset with 32 teams
+# - Creates player dataset with 427 active players (consolidated by current team)
+# - Saves projections to data/projections/nfl25_proj_week2.csv
+
+# Verify weekly projections
+python -c "import pandas as pd; week1 = pd.read_csv('data/projections/nfl25_proj_week1.csv'); week2 = pd.read_csv('data/projections/nfl25_proj_week2.csv'); print(f'Week 1: {len(week1)} players'); print(f'Week 2: {len(week2)} players'); print('Sample Week 2 projections:'); print(week2[['name', 'proj_pass_yd', 'proj_rush_yd', 'proj_rec_yd']].head(10))"
+
+# Expected output:
+# - Shows 472 players with time-weighted projections
+# - Recent performance (2025 Week 1) has higher influence than older games
+# - Projections reflect recent trends and form
+```
+
+### Test the Previous Task (Optimized NFL Data Scraper - nfl_data.py)
 ```bash
 # Install required dependency first
 pip install undetected-chromedriver
@@ -279,7 +359,7 @@ python -c "import json; print('Picks insights keys:', list(json.load(open('data/
 ### Test the Previous Task (Active Roster Filtering for NFL Projections)
 ```bash
 # Test active roster filtering with current data
-python nfl_proj.py --game-data data/game_data_2024.csv nfl2025sched.csv 1
+python nfl_proj.py --game-data data/game_data_2024.csv data/nfl-2025-EasternStandardTime.csv 1
 
 # Expected output:
 # - Loads active roster from data/master_roster.xlsx

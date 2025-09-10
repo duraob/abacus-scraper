@@ -31,7 +31,7 @@ Raw Data Collection → Processing & Analysis → AI-Powered Insights → Bettin
 - **`data/master_roster.xlsx`** - Current NFL active roster (player-team mappings)
 - **`data/team_map.xlsx`** - Team name to abbreviation mappings
 - **`data/player_name_mapping.csv`** - Odds names to projection names mappings
-- **`nfl2025sched.csv`** - 2025 NFL season schedule
+- **`data/nfl-2025-EasternStandardTime.csv`** - 2025 NFL season schedule (complete 18 weeks)
 
 ### Configuration & Utilities
 - **`telegram_bot.py`** - Telegram bot integration for notifications
@@ -65,19 +65,33 @@ python pfr_scraper.py
 
 ### Step 2: Generate Fantasy Projections
 ```bash
-# Generate projections with active roster filtering
-python nfl_proj.py --game-data data/game_data_2024.csv nfl2025sched.csv 1
+# Generate Week 1 projections (10 games from 2024)
+python projection.py 1
+
+# Generate Week 2 projections (9 games from 2024 + 1 from 2025)
+python projection.py 2
+
+# Generate Week 3+ projections (available 2025 weeks + 2024 fill)
+python projection.py 3
 ```
 **What it does**:
+- **Week-Based Data Selection**: Automatically selects appropriate historical data based on projection week
+- **Time-Weighted Analysis**: Uses most recent 10 games with exponential time decay weighting
+- **Recent Performance Emphasis**: Most recent games get highest weight (1.0), older games decay to 0.1
+- **Dynamic Data Mixing**: 
+  - Week 1: 10 games from 2024 (no 2025 data yet)
+  - Week 2: 9 games from 2024 + 1 game from 2025
+  - Week 3+: Available 2025 weeks + remaining from 2024
 - Loads active roster from `data/master_roster.xlsx`
 - Filters to active players only (eliminates injured/inactive noise)
-- Creates team-level statistics with schedule strength normalization
-- Generates fantasy football projections based on opponent matchups
+- Creates team-level statistics with time-weighted aggregation
+- Generates fantasy football projections based on recent performance trends
 
 **Output**: 
-- `data/projections/nfl25_proj_week0.csv` - Fantasy projections
-- `nfl25_team.csv` - Team statistics
-- `nfl25_players.csv` - Player statistics
+- `data/projections/nfl25_proj_week1.csv` - Week 1 projections
+- `data/projections/nfl25_proj_week2.csv` - Week 2 projections
+- `nfl25_team.csv` - Time-weighted team statistics
+- `nfl25_players.csv` - Time-weighted player statistics
 
 ### Step 3: Collect Betting Odds
 ```bash
@@ -158,6 +172,13 @@ Ensure these files are present:
 - `nfl2025sched.csv` - 2025 NFL schedule
 
 ## 📊 Key Features
+
+### Time-Weighted Projections
+- **Recent Performance Emphasis**: 2025 Week 1 gets highest weight (1.0)
+- **Time Decay Weighting**: 2024 weeks weighted from 0.9 down to 0.1
+- **Trend Recognition**: Captures performance trends over last 10 games
+- **Configurable Timeframe**: Easy to adjust weeks or decay rates
+- **Data Quality**: Uses most recent and relevant performance data
 
 ### Active Roster Filtering
 - **Eliminates noise** from injured/inactive players

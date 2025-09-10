@@ -56,6 +56,48 @@ def load_active_roster(roster_file="data/master_roster.xlsx"):
     
     return active_players
 
+def create_player_team_mapping(roster_file="data/master_roster.xlsx"):
+    """
+    Create mapping of players to their current team from master roster.
+    
+    Args:
+        roster_file: Path to the master roster Excel file
+    
+    Returns:
+        dict: Mapping of clean player names to their current team abbreviations
+    """
+    if not os.path.exists(roster_file):
+        raise FileNotFoundError(f"Active roster file not found: {roster_file}")
+    
+    df_roster = pd.read_excel(roster_file)
+    
+    # Clean player names by removing common suffixes and extra whitespace
+    def clean_player_name(name):
+        """Clean player name by removing (IR), (PUP), etc. and normalizing whitespace"""
+        if pd.isna(name):
+            return None
+        
+        # Remove common injury/status suffixes
+        name = str(name).strip()
+        suffixes_to_remove = ['(IR)', '(PUP)', '(NFI)', '(COVID)', '(SUSP)', '(RESERVE)']
+        for suffix in suffixes_to_remove:
+            name = name.replace(suffix, '').strip()
+        
+        # Normalize multiple spaces to single space
+        name = ' '.join(name.split())
+        return name
+    
+    # Apply cleaning and create mapping
+    df_roster['clean_name'] = df_roster['Player'].apply(clean_player_name)
+    df_roster = df_roster.dropna(subset=['clean_name', 'team_name'])
+    
+    # Create player to current team mapping
+    player_team_mapping = dict(zip(df_roster['clean_name'], df_roster['team_name']))
+    
+    print(f"Created player-team mapping for {len(player_team_mapping)} players")
+    
+    return player_team_mapping
+
 def build_team_opponents_schedule(df_game_data):
     """
     Build a team schedule mapping from player-level game data.
@@ -78,26 +120,39 @@ def build_team_opponents_schedule(df_game_data):
         'week': 'count'  # Number of games played
     }).rename(columns={'opponent': 'opps', 'week': 'games'})
     
+    # Ensure opps is never empty - if no games, use empty list
+    team_opponents['opps'] = team_opponents['opps'].apply(
+        lambda x: "[]" if pd.isna(x) or x == "0.0" or x == 0.0 else x
+    )
+    
     return team_opponents
 
 def build_team_statistics(df_game_data):
     """
-    Aggregate player-level data to team-level statistics for each game.
+    Aggregate player-level data to team-level statistics for each game with time weighting.
     
     This function creates both offensive and defensive team statistics:
-    - Offensive stats: Direct aggregation of team's offensive performance
-    - Defensive stats: Aggregation of opponent's offensive performance 
+    - Offensive stats: Direct aggregation of team's offensive performance (time-weighted)
+    - Defensive stats: Aggregation of opponent's offensive performance (time-weighted)
                       (represents how well the team's defense performed)
     
     Args:
-        df_game_data: DataFrame with player performance data
+        df_game_data: DataFrame with player performance data (must include time_weight column)
     
     Returns:
-        DataFrame with team-level aggregated stats per game
+        DataFrame with team-level time-weighted aggregated stats per game
     """
-    # Group by team, opponent, week and aggregate offensive stats
+    # Apply time weights to all stats before aggregation
+    df_weighted = df_game_data.copy()
+    stat_columns = ['pass_cmp', 'pass_att', 'pass_yds', 'pass_tds', 'pass_int', 'sacks',
+                   'rush_att', 'rush_yds', 'rush_tds', 'targets', 'receptions', 'rec_yds', 'rec_tds', 'fumbles']
+    
+    for col in stat_columns:
+        df_weighted[col] = df_weighted[col] * df_weighted['time_weight']
+    
+    # Group by team, opponent, week and aggregate time-weighted offensive stats
     # These represent the team's offensive performance in each game
-    team_stats = df_game_data.groupby(['team', 'opponent', 'week']).agg({
+    team_stats = df_weighted.groupby(['team', 'opponent', 'week']).agg({
         'pass_cmp': 'sum',
         'pass_att': 'sum',
         'pass_yds': 'sum', 
@@ -114,10 +169,10 @@ def build_team_statistics(df_game_data):
         'fumbles': 'sum'
     }).reset_index()
     
-    # Calculate defensive stats by aggregating opponent's offensive performance
+    # Calculate defensive stats by aggregating opponent's offensive performance with time weighting
     # When we group by opponent, we're getting the opponent's offensive stats
     # These become our defensive stats (how well we defended against them)
-    opponent_offensive_stats = df_game_data.groupby(['opponent', 'team', 'week']).agg({
+    opponent_offensive_stats = df_weighted.groupby(['opponent', 'team', 'week']).agg({
         'pass_cmp': 'sum',
         'pass_att': 'sum',
         'pass_yds': 'sum',
@@ -169,49 +224,206 @@ def determine_next_opponent(team, current_week, df_schedule):
     Args:
         team: Team name
         current_week: Current week number
-        df_schedule: Schedule DataFrame with columns [Week, away_team, home_team]
+        df_schedule: Schedule DataFrame with columns [Round Number, Away Team, Home Team]
     
     Returns:
         Next opponent team name or None if on bye
     """
     # Find next game for this team (week > current_week)
-    future_games = df_schedule[df_schedule['Week'] > current_week]
+    future_games = df_schedule[df_schedule['Round Number'] > current_week]
     
     # Find games where this team plays
     team_games = future_games[
-        (future_games['away_team'] == team) | 
-        (future_games['home_team'] == team)
+        (future_games['Away Team'] == team) | 
+        (future_games['Home Team'] == team)
     ]
     
     if team_games.empty:
         return None  # Team is on bye or no more games
     
     # Get the next game (lowest week number)
-    next_game = team_games.loc[team_games['Week'].idxmin()]
+    next_game = team_games.loc[team_games['Round Number'].idxmin()]
     
     # Determine opponent
-    if next_game['away_team'] == team:
-        return next_game['home_team']
+    if next_game['Away Team'] == team:
+        return next_game['Home Team']
     else:
-        return next_game['away_team']
+        return next_game['Away Team']
+
+def create_time_weighted_dataset(week_2025_file, weeks_2024_file, target_weeks_2024):
+    """
+    Merge 2025 Week 1 with specified 2024 weeks, applying time decay weighting.
+    
+    Time weights: 2025 Week 1 = 1.0, 2024 Week 17 = 0.9, ..., 2024 Week 9 = 0.1
+    This ensures recent games have higher influence on projections.
+    
+    Args:
+        week_2025_file: Path to 2025 Week 1 data (highest weight)
+        weeks_2024_file: Path to 2024 season data
+        target_weeks_2024: List of 2024 weeks to include (e.g., [9,10,11,12,13,14,15,16,17])
+    
+    Returns:
+        DataFrame with time-weighted game data including weight column
+    """
+    print(f"Loading 2025 Week 1 data from {week_2025_file}...")
+    df_2025 = pd.read_csv(week_2025_file)
+    
+    print(f"Loading 2024 data from {weeks_2024_file}...")
+    df_2024 = pd.read_csv(weeks_2024_file)
+    
+    # Filter 2024 data to target weeks
+    df_2024_filtered = df_2024[df_2024['week'].isin(target_weeks_2024)].copy()
+    print(f"Filtered 2024 data to weeks {target_weeks_2024}: {len(df_2024_filtered)} records")
+    
+    # Normalize team names to abbreviations for consistency
+    # 2025 data has full team names in opponent column, 2024 data uses abbreviations
+    team_name_mapping = {
+        'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL', 'Carolina Panthers': 'CAR',
+        'Chicago Bears': 'CHI', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL',
+        'Detroit Lions': 'DET', 'Houston Texans': 'HOU', 'Kansas City Chiefs': 'KAN',
+        'Miami Dolphins': 'MIA', 'New England Patriots': 'NWE', 'New Orleans Saints': 'NOR',
+        'New York Giants': 'NYG', 'New York Jets': 'NYJ', 'Seattle Seahawks': 'SEA',
+        'Tennessee Titans': 'TEN'
+    }
+    
+    # Normalize opponent column in 2025 data to use abbreviations
+    df_2025['opponent'] = df_2025['opponent'].map(team_name_mapping).fillna(df_2025['opponent'])
+    
+    # Add time weights
+    df_2025['time_weight'] = 1.0  # Most recent, highest weight
+    
+    # Calculate time weights for 2024 weeks (0.9 down to 0.1)
+    weight_map = {}
+    for i, week in enumerate(sorted(target_weeks_2024, reverse=True)):
+        weight_map[week] = 0.9 - (i * 0.1)
+    
+    df_2024_filtered['time_weight'] = df_2024_filtered['week'].map(weight_map)
+    
+    # Combine datasets
+    df_combined = pd.concat([df_2025, df_2024_filtered], ignore_index=True)
+    
+    print(f"Combined dataset: {len(df_combined)} total records")
+    print(f"Time weights applied: 2025 Week 1 = 1.0, 2024 weeks = {weight_map}")
+    print(f"Team names normalized to abbreviations for consistency")
+    
+    return df_combined
+
+def create_time_weighted_dataset_dynamic(week_2025_file, weeks_2024_file, target_weeks_2024, projection_week):
+    """
+    Create time-weighted dataset based on projection week requirements.
+    
+    Args:
+        week_2025_file: Path to 2025 season data
+        weeks_2024_file: Path to 2024 season data  
+        target_weeks_2024: List of 2024 weeks to include as fallback
+        projection_week: Week number for projections (1 = Week 1, 2 = Week 2, etc.)
+    
+    Returns:
+        DataFrame with time-weighted game data including weight column
+    """
+    print(f"Loading 2025 data from {week_2025_file}...")
+    df_2025 = pd.read_csv(week_2025_file)
+    
+    print(f"Loading 2024 data from {weeks_2024_file}...")
+    df_2024 = pd.read_csv(weeks_2024_file)
+    
+    # Determine data selection based on projection week
+    if projection_week == 1:
+        # Week 1 projections: Use 10 games from 2024 (no 2025 data yet)
+        print("Week 1 projections: Using 10 games from 2024 data")
+        weeks_to_include_2025 = []
+        weeks_to_include_2024 = sorted(target_weeks_2024, reverse=True)[:10]  # Most recent 10 weeks
+        df_2025_filtered = pd.DataFrame()  # Empty DataFrame
+        df_2024_filtered = df_2024[df_2024['week'].isin(weeks_to_include_2024)].copy()
+        
+    elif projection_week == 2:
+        # Week 2 projections: Use 9 games from 2024 + 1 game from 2025
+        print("Week 2 projections: Using 9 games from 2024 + 1 game from 2025")
+        available_2025_weeks = sorted(df_2025['week'].unique())
+        weeks_to_include_2025 = [available_2025_weeks[0]]  # First week of 2025
+        weeks_to_include_2024 = sorted(target_weeks_2024, reverse=True)[:9]  # Most recent 9 weeks
+        df_2025_filtered = df_2025[df_2025['week'].isin(weeks_to_include_2025)].copy()
+        df_2024_filtered = df_2024[df_2024['week'].isin(weeks_to_include_2024)].copy()
+        
+    else:
+        # Week 3+ projections: Use available 2025 weeks + fill remaining with 2024
+        print(f"Week {projection_week} projections: Using available 2025 weeks + 2024 fill")
+        available_2025_weeks = sorted(df_2025['week'].unique())
+        weeks_to_include_2025 = [w for w in available_2025_weeks if w < projection_week]
+        weeks_needed_from_2024 = 10 - len(weeks_to_include_2025)
+        weeks_to_include_2024 = sorted(target_weeks_2024, reverse=True)[:weeks_needed_from_2024]
+        df_2025_filtered = df_2025[df_2025['week'].isin(weeks_to_include_2025)].copy()
+        df_2024_filtered = df_2024[df_2024['week'].isin(weeks_to_include_2024)].copy()
+    
+    print(f"Including 2025 weeks: {weeks_to_include_2025}")
+    print(f"Including 2024 weeks: {weeks_to_include_2024}")
+    
+    # Normalize team names to abbreviations for consistency
+    team_name_mapping = {
+        'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL', 'Carolina Panthers': 'CAR',
+        'Chicago Bears': 'CHI', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL',
+        'Detroit Lions': 'DET', 'Houston Texans': 'HOU', 'Kansas City Chiefs': 'KAN',
+        'Miami Dolphins': 'MIA', 'New England Patriots': 'NWE', 'New Orleans Saints': 'NOR',
+        'New York Giants': 'NYG', 'New York Jets': 'NYJ', 'Seattle Seahawks': 'SEA',
+        'Tennessee Titans': 'TEN'
+    }
+    
+    # Normalize opponent column in 2025 data to use abbreviations (only if data exists)
+    if not df_2025_filtered.empty:
+        df_2025_filtered['opponent'] = df_2025_filtered['opponent'].map(team_name_mapping).fillna(df_2025_filtered['opponent'])
+    
+    # Calculate time weights - most recent week gets highest weight
+    all_weeks = []
+    weight_map = {}
+    
+    # Add 2025 weeks with weights (most recent = 1.0)
+    if not df_2025_filtered.empty:
+        for i, week in enumerate(sorted(weeks_to_include_2025, reverse=True)):
+            weight_map[('2025', week)] = 1.0 - (i * 0.1)
+            all_weeks.append(('2025', week))
+    
+    # Add 2024 weeks with weights (continuing the decay)
+    if not df_2024_filtered.empty:
+        start_weight = 1.0 - (len(weeks_to_include_2025) * 0.1)
+        for i, week in enumerate(sorted(weeks_to_include_2024, reverse=True)):
+            weight_map[('2024', week)] = start_weight - (i * 0.1)
+            all_weeks.append(('2024', week))
+    
+    # Apply weights
+    if not df_2025_filtered.empty:
+        df_2025_filtered['time_weight'] = df_2025_filtered['week'].apply(lambda w: weight_map[('2025', w)])
+    
+    if not df_2024_filtered.empty:
+        df_2024_filtered['time_weight'] = df_2024_filtered['week'].apply(lambda w: weight_map[('2024', w)])
+    
+    # Combine datasets
+    if not df_2024_filtered.empty:
+        df_combined = pd.concat([df_2025_filtered, df_2024_filtered], ignore_index=True)
+    else:
+        df_combined = df_2025_filtered.copy()
+    
+    print(f"Combined dataset: {len(df_combined)} total records")
+    print(f"Time weights applied: {weight_map}")
+    print(f"Team names normalized to abbreviations for consistency")
+    
+    return df_combined
 
 def create_team_dataset_from_game_data(df_game_data, df_schedule=None, current_week=None):
     """
-    Create a complete team dataset from player-level game data that's compatible
-    with the existing analyze function.
+    Create a complete team dataset from player-level game data with time weighting.
     
     This function creates team-level statistics by:
-    1. Aggregating each team's offensive performance across all games
-    2. Aggregating each team's defensive performance (opponent offensive stats) across all games
+    1. Aggregating each team's offensive performance across all games (with time weights)
+    2. Aggregating each team's defensive performance (opponent offensive stats) across all games (with time weights)
     3. Adding schedule information for strength of schedule calculations
     
     Args:
-        df_game_data: DataFrame with player performance data
+        df_game_data: DataFrame with player performance data (must include time_weight column)
         df_schedule: Schedule DataFrame with columns [Week, away_team, home_team] (optional)
         current_week: Current week number for determining next opponent (optional)
     
     Returns:
-        DataFrame with team-level data including opps column and aggregated stats
+        DataFrame with team-level data including opps column and time-weighted aggregated stats
     """
     # Build team opponents schedule
     team_schedule = build_team_opponents_schedule(df_game_data)
@@ -284,17 +496,18 @@ def create_team_dataset_from_game_data(df_game_data, df_schedule=None, current_w
     # Keep team as a regular column - let analyze function handle index management
     return team_complete
 
-def create_player_dataset_from_game_data(df_game_data, active_roster):
+def create_player_dataset_from_game_data(df_game_data, active_roster, player_team_mapping):
     """
-    Create a player dataset from player-level game data that's compatible
-    with the existing analyze function. Only includes players on the active roster.
+    Create a player dataset from player-level game data with time weighting.
+    Only includes players on the active roster, consolidated by their current team.
     
     Args:
-        df_game_data: DataFrame with player performance data
+        df_game_data: DataFrame with player performance data (must include time_weight column)
         active_roster: Set of active player names for filtering
+        player_team_mapping: Dict mapping player names to their current team
     
     Returns:
-        DataFrame with player-level aggregated stats for active players only
+        DataFrame with player-level time-weighted aggregated stats for active players only, consolidated by current team
     """
     # Log initial statistics
     total_players_in_data = df_game_data['player'].nunique()
@@ -325,8 +538,16 @@ def create_player_dataset_from_game_data(df_game_data, active_roster):
     if df_filtered.empty:
         raise ValueError("No active players found in game data. Check name matching between roster and game data.")
     
-    # Group by player and team, aggregate stats across all games
-    player_stats = df_filtered.groupby(['player', 'team']).agg({
+    # Apply time weights to all stats before aggregation
+    df_filtered_weighted = df_filtered.copy()
+    stat_columns = ['pass_cmp', 'pass_att', 'pass_yds', 'pass_tds', 'pass_int', 'sacks',
+                   'rush_att', 'rush_yds', 'rush_tds', 'targets', 'receptions', 'rec_yds', 'rec_tds', 'fumbles']
+    
+    for col in stat_columns:
+        df_filtered_weighted[col] = df_filtered_weighted[col] * df_filtered_weighted['time_weight']
+    
+    # Group by player only (not by team) to consolidate all team performances
+    player_stats = df_filtered_weighted.groupby('player').agg({
         'pass_cmp': 'sum',
         'pass_att': 'sum',
         'pass_yds': 'sum',
@@ -356,12 +577,18 @@ def create_player_dataset_from_game_data(df_game_data, active_roster):
         'targets': 'tar'
     })
     
-    # Count games played (weeks) for each player
-    games_played = df_filtered.groupby(['player', 'team'])['week'].nunique().reset_index()
-    games_played.columns = ['player', 'team', 'g']
+    # Count total games played (weeks) for each player across all teams
+    games_played = df_filtered.groupby('player')['week'].nunique().reset_index()
+    games_played.columns = ['player', 'g']
     
     # Merge stats with games played
-    player_complete = pd.merge(player_stats, games_played, on=['player', 'team'], how='left')
+    player_complete = pd.merge(player_stats, games_played, on='player', how='left')
+    
+    # Add current team from mapping
+    player_complete['team'] = player_complete['player'].map(player_team_mapping)
+    
+    # Remove players without current team mapping (shouldn't happen with active roster)
+    player_complete = player_complete.dropna(subset=['team'])
     
     # Rename player column to 'name' to match expected format
     player_complete.rename(columns={'player': 'name'}, inplace=True)
@@ -371,12 +598,12 @@ def create_player_dataset_from_game_data(df_game_data, active_roster):
     player_complete = player_complete[player_complete['team'] != '']
     player_complete = player_complete[player_complete['team'] != 0.0]
     
-    print(f"Final player dataset size: {len(player_complete)} players")
+    print(f"Final player dataset size: {len(player_complete)} players (consolidated by current team)")
     
     # Keep name as a regular column - let analyze function handle index management
     return player_complete
 
-def analyze(df_team, df_players):
+def analyze(df_team, df_players, projection_week=1):
     """
         SETUP DATAFRAMES
             Fill any empty cells
@@ -387,6 +614,10 @@ def analyze(df_team, df_players):
     df_team_avg = df_team.copy()
     df_team_avg.set_index("team", inplace=True)
     df_team_avg.index.name="team"
+    # Handle NaN values in opps column before applying literal_eval
+    df_team_avg['opps'] = df_team_avg['opps'].fillna("[]")
+    # Also handle any 0.0 values that might have been created
+    df_team_avg['opps'] = df_team_avg['opps'].replace(0.0, "[]")
     df_team_avg['opps'] = df_team_avg['opps'].apply(ast.literal_eval)
     df_team_avg['games'] = df_team_avg['opps'].apply(len)
 
@@ -596,9 +827,8 @@ def analyze(df_team, df_players):
     projections_dir = "data/projections"
     os.makedirs(projections_dir, exist_ok=True)
     
-    # Generate filename based on current week
-    current_week = getattr(globals(), 'current_week_param', 0)  # Default to 0 if not set
-    filename = f"nfl25_proj_week{current_week}.csv"
+    # Generate filename based on projection week
+    filename = f"nfl25_proj_week{projection_week}.csv"
     filepath = os.path.join(projections_dir, filename)
     
     df_round.to_csv(filepath, index="name")
@@ -645,46 +875,54 @@ def run():
 
     analyze(df_team, df_players)
 
-def run_with_game_data(season_data_file, schedule_file=None, current_week=None, roster_file="data/master_roster.xlsx"):
+def run_with_time_weighted_data(week_2025_file, weeks_2024_file, target_weeks_2024, 
+                               schedule_file=None, current_week=None, roster_file="data/master_roster.xlsx"):
     """
-    Run the projection engine using game data from the new CSV format.
+    Run the projection engine using time-weighted last 10 games with dynamic week progression.
     Only includes players on the active roster to eliminate noise from inactive players.
     
+    Time weights: Most recent week = 1.0, previous weeks = 0.9, 0.8, ..., 0.1
+    This ensures recent games have higher influence on projections.
+    
     Args:
-        season_data_file: Path to the game data CSV file (e.g., 'data/game_data_2024.csv')
+        week_2025_file: Path to 2025 season data (e.g., 'data/game_data_2025.csv')
+        weeks_2024_file: Path to 2024 season data (e.g., 'data/game_data_2024.csv')
+        target_weeks_2024: List of 2024 weeks to include (e.g., [9,10,11,12,13,14,15,16,17])
         schedule_file: Path to the schedule CSV file (e.g., 'nfl2025sched.csv') (optional)
         current_week: Current week number for determining next opponent (optional)
         roster_file: Path to the active roster Excel file (default: 'data/master_roster.xlsx')
     """
     # Set global current week parameter for filename generation
     global current_week_param
-    current_week_param = current_week if current_week is not None else 0
+    current_week_param = current_week if current_week is not None else 1
     
     start = dt.now()
-    print(f"\nProjection Program Start with Game Data - {start}:\n")
-    print(f"Generating projections for Week {current_week_param}\n")
+    print(f"\nProjection Program Start with Time-Weighted Data - {start}:\n")
+    print(f"Generating projections for Week {current_week_param}")
+    print(f"Using time-weighted data with decay weighting\n")
     
-    # Load active roster first
+    # Load active roster and player team mapping
     active_roster = load_active_roster(roster_file)
+    player_team_mapping = create_player_team_mapping(roster_file)
     
-    # Load game data
-    print(f"Loading game data from {season_data_file}...")
-    df_season_data = pd.read_csv(season_data_file)
+    # Create time-weighted dataset with dynamic week selection
+    df_season_data = create_time_weighted_dataset_dynamic(week_2025_file, weeks_2024_file, 
+                                                         target_weeks_2024, current_week_param)
     
     # Load schedule data if provided
     df_schedule = None
     if schedule_file:
         print(f"Loading schedule data from {schedule_file}...")
         df_schedule = pd.read_csv(schedule_file)
-        # Convert Week to numeric if it's not already
-        df_schedule['Week'] = pd.to_numeric(df_schedule['Week'])
+        # Convert Round Number to numeric if it's not already
+        df_schedule['Round Number'] = pd.to_numeric(df_schedule['Round Number'])
     
     # Create team and player datasets
     print("Creating team dataset...")
-    df_team = create_team_dataset_from_game_data(df_season_data, df_schedule, current_week)
+    df_team = create_team_dataset_from_game_data(df_season_data, df_schedule, current_week_param)
     
-    print("Creating player dataset (active roster only)...")
-    df_players = create_player_dataset_from_game_data(df_season_data, active_roster)
+    print("Creating player dataset (active roster only, consolidated by current team)...")
+    df_players = create_player_dataset_from_game_data(df_season_data, active_roster, player_team_mapping)
     
     # Save the created datasets for future use
     df_team.to_csv("nfl25_team.csv")
@@ -695,27 +933,44 @@ def run_with_game_data(season_data_file, schedule_file=None, current_week=None, 
     print(f"\nProjection Program End - {end}\n Total: {end - start}\n")
     
     # Run analysis
-    analyze(df_team, df_players)
+    analyze(df_team, df_players, current_week_param)
 ## main
 if __name__ == "__main__":
     import sys
     
-    if len(sys.argv) > 1 and sys.argv[1] == "--game-data":
-        if len(sys.argv) > 2:
-            game_data_file = sys.argv[2]
+    # Default parameters
+    week_2025_file = "data/game_data_2025.csv"
+    weeks_2024_file = "data/game_data_2024.csv"
+    target_weeks_2024 = [9, 10, 11, 12, 13, 14, 15, 16, 17]
+    schedule_file = "data/nfl-2025-EasternStandardTime.csv"
+    current_week = 1  # Default to Week 1
+    
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--week":
+            # Specify current week: python projection.py --week 2
+            if len(sys.argv) > 2:
+                current_week = int(sys.argv[2])
+            else:
+                print("Usage: python projection.py --week <week_number>")
+                print("Example: python projection.py --week 2")
+                sys.exit(1)
+        elif sys.argv[1] == "--time-weighted":
+            # Legacy support: python projection.py --time-weighted schedule.csv week
+            if len(sys.argv) > 2:
+                schedule_file = sys.argv[2]
+            if len(sys.argv) > 3:
+                current_week = int(sys.argv[3])
         else:
-            game_data_file = "data/game_data_2024.csv"  # Default to 2024 data
-        
-        # Optional schedule file and current week
-        schedule_file = None
-        current_week = None
-        
-        if len(sys.argv) > 3:
-            schedule_file = sys.argv[3]
-        if len(sys.argv) > 4:
-            current_week = int(sys.argv[4])
-        
-        run_with_game_data(game_data_file, schedule_file, current_week)
-    else:
-        run()
+            # Assume first argument is week number: python projection.py 2
+            try:
+                current_week = int(sys.argv[1])
+            except ValueError:
+                print(f"Invalid argument: {sys.argv[1]}")
+                print("Usage: python projection.py [week_number]")
+                print("Example: python projection.py 2")
+                sys.exit(1)
+    
+    print(f"Running projections for Week {current_week}")
+    run_with_time_weighted_data(week_2025_file, weeks_2024_file, target_weeks_2024, 
+                              schedule_file, current_week)
 
