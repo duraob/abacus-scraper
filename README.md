@@ -1,287 +1,135 @@
-# NFL Data Analysis & Betting Intelligence Platform
+# Abacus Scraper - NFL Data Collection System
 
-A comprehensive Python platform for NFL data collection, analysis, and betting intelligence. This system combines web scraping, statistical analysis, and AI-powered insights to generate actionable betting recommendations and fantasy football projections.
+This application is a comprehensive NFL data scraping system that collects various types of football data for analysis and projection purposes.
 
-## 🏗️ Project Architecture
+## What This Application Does
 
-### Core Data Pipeline
-```
-Raw Data Collection → Processing & Analysis → AI-Powered Insights → Betting Recommendations
-```
+The Abacus Scraper is designed to automatically collect NFL data from multiple sources to help with fantasy football analysis and projections. It's like having a digital assistant that visits NFL websites and gathers all the important information for you.
 
-### Weekly Workflow
-1. **Data Collection**: Scrape fresh NFL data and betting odds
-2. **Processing**: Generate projections and statistical analysis
-3. **Intelligence**: AI-powered betting recommendations and trend analysis
-4. **Output**: Actionable insights for fantasy and betting decisions
+## Main Components
 
-## 📁 Project Files & Components
+### 1. NFL Data Scraper (`nfl_data.py`)
+- **What it does**: Collects detailed player statistics from Pro Football Reference
+- **How it works**: Uses a special web browser (undetected Chrome) to visit the website and extract game data
+- **What you get**: Complete player stats including passing, rushing, receiving, and team information
+- **When to use**: Run this weekly to get fresh game data for the current season
 
-### Data Collection & Scraping
-- **`nfl_data.py`** - **NEW**: Optimized NFL game data scraper with undetected Chrome driver
-- **`pfr_scraper.py`** - Legacy NFL game data scraper from Pro Football Reference
-- **`odds.py`** - Betting odds collection from The Odds API
+### 2. Injuries Scraper (`injuries.py`) - NEW!
+- **What it does**: Collects current injury information for all NFL players
+- **How it works**: Visits ESPN's injury page and extracts player injury status
+- **What you get**: Player names, positions, injury status, expected return dates, and detailed comments
+- **Team Mapping**: Automatically converts full team names to standard abbreviations (ARI, ATL, BAL, etc.)
+- **When to use**: Run this daily or weekly to stay updated on player injuries
 
-### Analysis & Projections
-- **`projection.py`** - Fantasy football projection engine with schedule strength normalization
-- **`stats_agent.py`** - Historical trend analysis and statistical insights generator
-- **`picks_agent.py`** - AI-powered betting recommendations with live search integration
+### 3. Projection Engine (`projection.py`)
+- **What it does**: Creates fantasy football projections using historical data and injury information
+- **How it works**: Analyzes player performance, team matchups, and schedule strength
+- **Injury Integration**: Automatically excludes players who are "Out" or "Injured Reserve" from projections
+- **What you get**: Weekly player projections with realistic expectations based on availability
+- **When to use**: Run weekly to get updated projections for the current week
 
-### Data Management
-- **`data/master_roster.xlsx`** - Current NFL active roster (player-team mappings)
-- **`data/team_map.xlsx`** - Team name to abbreviation mappings
-- **`data/player_name_mapping.csv`** - Odds names to projection names mappings
-- **`data/nfl-2025-EasternStandardTime.csv`** - 2025 NFL season schedule (complete 18 weeks)
+### 4. Other Components
+- **Stats Analysis**: Processes and analyzes the scraped data
+- **Telegram Bot**: Sends updates and insights via messaging
 
-### Configuration & Utilities
-- **`telegram_bot.py`** - Telegram bot integration for notifications
-- **`prompt.txt`** - AI prompt templates for analysis
-- **`.cursorrules`** - Development guidelines and coding standards
-
-## 🚀 Weekly Data Pipeline
-
-### Step 1: Collect Fresh NFL Data
-```bash
-# Scrape current season game data from Pro Football Reference (NEW OPTIMIZED VERSION)
-python nfl_data.py 2025
-
-# Or use legacy scraper
-python pfr_scraper.py
-```
-**Output**: `data/game_data_2025.csv` - Complete player performance data
-
-**New Features in nfl_data.py**:
-- **Undetected Chrome Driver**: Bypasses Cloudflare protection
-- **Method-Based Architecture**: Clean, modular, testable functions
-- **Intelligent Caching**: 24-hour cache system for faster development
-- **Retry Logic**: Robust error handling with automatic retries
-- **Year Parameter**: Run with any year: `python nfl_data.py 2024`
-- **Target Format Compliance**: Output matches exact CSV structure
-- **Schedule-Based Scraping**: Efficient single-page approach vs team-by-team
-- **Mathematical Snap Counts**: Calculated from pass attempts + rushes
-- **Position Extraction**: Accurate player positions from snap count tables
-- **Clean Weather Data**: Proper weather text extraction from game info
-- **Team Assignment**: Correct player-to-team mapping
-
-### Step 2: Generate Fantasy Projections
-```bash
-# Generate Week 1 projections (10 games from 2024)
-python projection.py 1
-
-# Generate Week 2 projections (9 games from 2024 + 1 from 2025)
-python projection.py 2
-
-# Generate Week 3+ projections (available 2025 weeks + 2024 fill)
-python projection.py 3
-```
-**What it does**:
-- **Week-Based Data Selection**: Automatically selects appropriate historical data based on projection week
-- **Time-Weighted Analysis**: Uses most recent 10 games with exponential time decay weighting
-- **Recent Performance Emphasis**: Most recent games get highest weight (1.0), older games decay to 0.1
-- **Dynamic Data Mixing**: 
-  - Week 1: 10 games from 2024 (no 2025 data yet)
-  - Week 2: 9 games from 2024 + 1 game from 2025
-  - Week 3+: Available 2025 weeks + remaining from 2024
-- Loads active roster from `data/master_roster.xlsx`
-- Filters to active players only (eliminates injured/inactive noise)
-- Creates team-level statistics with time-weighted aggregation
-- Generates fantasy football projections based on recent performance trends
-
-**Output**: 
-- `data/projections/nfl25_proj_week1.csv` - Week 1 projections
-- `data/projections/nfl25_proj_week2.csv` - Week 2 projections
-- `nfl25_team.csv` - Time-weighted team statistics
-- `nfl25_players.csv` - Time-weighted player statistics
-
-### Step 3: Collect Betting Odds
-```bash
-# Scrape current week's betting odds
-python odds.py
-```
-**What it does**:
-- Determines current NFL week from schedule
-- Collects team odds (spreads, totals, moneyline)
-- Gathers player props (passing, rushing, receiving stats)
-- Organizes data by week in structured directories
-
-**Output**: 
-- `data/odds/week_01/team_odds_week_01.csv`
-- `data/odds/week_01/player_props_week_01.csv`
-
-### Step 4: AI-Powered Betting Analysis
-```bash
-# Generate AI-powered betting recommendations
-python picks_agent.py
-```
-**What it does**:
-- Compares projections to betting lines to find mathematical edges
-- Uses live search to gather injury reports, news, and expert insights
-- Sends top opportunities to Grok AI for intelligent analysis
-- Returns top 10 betting recommendations with reasoning
-
-**Output**: 
-- `data/insights/grok_insights_week_01.json` - AI betting recommendations
-
-### Step 5: Historical Trend Analysis
-```bash
-# Generate statistical insights and fun facts
-python stats_agent.py
-```
-**What it does**:
-- Analyzes 9 seasons of historical data (2016-2024)
-- Compares player performance trends to current betting lines
-- Identifies statistical anomalies and betting opportunities
-- Generates ESPN-style insights using Grok AI
-
-**Output**: 
-- `data/nuggets/nuggets_week_01.json` - Raw statistical data
-- `data/fun_stats/stats_insights_week_01.json` - AI-enhanced statistical insights
-
-## 🔧 Setup & Configuration
+## How to Use the Injuries Scraper
 
 ### Prerequisites
+Make sure you have the virtual environment activated:
 ```bash
-# Install required packages
-pip install pandas numpy selenium beautifulsoup4 requests xai-sdk openpyxl undetected-chromedriver
+.venv\Scripts\Activate.ps1
 ```
 
-### Testing the New NFL Data Scraper
+### Running the Injuries Scraper
 ```bash
-# Test basic functionality (recommended first)
-python nfl_data.py test
-
-# Scrape data for specific year
-python nfl_data.py 2024
-
-# Scrape current year (default)
-python nfl_data.py
+python injuries.py
 ```
 
-### API Keys
-Create a `.env` file in the project root:
-```bash
-# .env file
-GROK_API_KEY=your_grok_api_key_here
-ODDS_API_KEY=your_odds_api_key_here
+### What Happens When You Run It
+1. The program opens a web browser (you won't see it)
+2. It visits ESPN's NFL injuries page
+3. It finds all 32 NFL teams and their injury lists
+4. It extracts information for each injured player:
+   - Player name
+   - Position (QB, RB, WR, etc.)
+   - Expected return date
+   - Current status (Questionable, Out, Injured Reserve, etc.)
+   - Detailed injury comments
+5. It saves all this data to a CSV file in the `data/` folder
+
+### Output
+The scraper creates a file like `data/injuries_20250912_113829.csv` with all the injury data. You can open this file in Excel or any spreadsheet program to view the information.
+
+### Example Data
+The CSV file contains columns like:
+- **team**: NFL team abbreviation (ARI, ATL, BAL, etc.) - automatically converted from full names
+- **name**: Player's name
+- **pos**: Player's position
+- **est_return_date**: When they might return
+- **status**: Current injury status
+- **comment**: Detailed injury information
+- **scraped_date**: When the data was collected
+
+## Testing the Latest Features
+
+### Testing the Injuries Scraper
+
+1. **Activate the virtual environment**:
+   ```bash
+   .venv\Scripts\Activate.ps1
+   ```
+
+2. **Run the scraper**:
+   ```bash
+   python injuries.py
+   ```
+
+3. **Check the results**:
+   - Look for `data/injuries.csv` file
+   - The program will tell you how many injury records were found
+   - You should see data for all 32 NFL teams
+
+4. **Verify the data**:
+   - Open the CSV file in Excel or a text editor
+   - Check that you see player names, positions, and injury information
+   - Verify that all 32 teams are represented
+
+### Testing the Projection Engine with Injury Filtering
+
+1. **Run the projection engine**:
+   ```bash
+   python projection.py 2
+   ```
+
+2. **Check the output**:
+   - The program will show how many injured players were excluded
+   - Look for messages like "Excluded 255 injured players from active roster"
+   - Final projections will only include available players
+
+3. **Verify injury filtering**:
+   - Check `data/projections/nfl25_proj_week1.csv`
+   - Injured players should not appear in the projections
+   - Only healthy, available players should have projections
+
+## Important Notes
+
+- The scraper uses a special browser that avoids detection by websites
+- It includes delays to be respectful to the website
+- Data is cached to avoid repeated requests
+- The program handles errors gracefully and logs what it's doing
+
+## File Structure
+
+```
+abacus-scraper/
+├── data/                    # All collected data goes here
+│   ├── injuries_*.csv      # Injury data files
+│   ├── game_data_*.csv     # Game statistics
+│   └── other data files
+├── injuries.py             # NEW: Injuries scraper
+├── nfl_data.py            # Main NFL data scraper
+├── other Python files     # Additional components
+└── README.md              # This file
 ```
 
-### Data Files
-Ensure these files are present:
-- `data/master_roster.xlsx` - Current NFL active roster
-- `data/team_map.xlsx` - Team name mappings
-- `nfl2025sched.csv` - 2025 NFL schedule
-
-## 📊 Key Features
-
-### Time-Weighted Projections
-- **Recent Performance Emphasis**: 2025 Week 1 gets highest weight (1.0)
-- **Time Decay Weighting**: 2024 weeks weighted from 0.9 down to 0.1
-- **Trend Recognition**: Captures performance trends over last 10 games
-- **Configurable Timeframe**: Easy to adjust weeks or decay rates
-- **Data Quality**: Uses most recent and relevant performance data
-
-### Active Roster Filtering
-- **Eliminates noise** from injured/inactive players
-- **Cleans player names** (removes "(IR)", "(PUP)" suffixes)
-- **Comprehensive logging** of filtering statistics
-- **Data validation** to ensure projection accuracy
-
-### Schedule Strength Normalization
-- **Opponent analysis** - tracks all teams faced by each team
-- **Strength of schedule** calculations for accurate projections
-- **Next opponent determination** for matchup-based projections
-- **League average comparisons** for normalized statistics
-
-### AI-Powered Intelligence
-- **Live search integration** for real-time news and injuries
-- **Contextual analysis** combining projections, odds, and news
-- **Confidence scoring** based on statistical variance
-- **Risk assessment** for each betting recommendation
-
-### Historical Analysis
-- **9 seasons of data** (2016-2024) for trend analysis
-- **Player-specific insights** based on career performance
-- **Opponent matchup history** for predictive analysis
-- **Statistical validation** with minimum sample sizes
-
-## 🎯 Output Examples
-
-### Fantasy Projections
-```csv
-name,proj_pass_att,proj_rush_att,proj_tar,proj_pass_yd,proj_rush_yd
-Josh Allen,34.18,1.29,0.00,245.50,8.75
-Saquon Barkley,0.00,9.66,3.31,0.00,67.25
-```
-
-### Betting Recommendations
-```json
-{
-  "player": "Saquon Barkley",
-  "prop": "Rushing Yards",
-  "line": 93.5,
-  "projection": 167.0,
-  "edge": 78.6,
-  "recommendation": "OVER",
-  "confidence": "High",
-  "reasoning": "Barkley averaging 167.0 rush yds vs 93.5 line in last 8 games"
-}
-```
-
-### Statistical Insights
-```csv
-week,player,prop_type,betting_line,historical_avg,edge_percentage,bet_direction,confidence
-1,Saquon Barkley,rush_yds,93.5,167.0,78.6,OVER,0.89
-1,Dallas Goedert,rec_yds,38.5,55.0,42.9,OVER,0.82
-```
-
-## 🔍 Quality Assurance
-
-### Data Validation
-- **Active roster filtering** ensures only current players
-- **Name matching** between odds and projections
-- **Statistical thresholds** for meaningful insights
-- **Error handling** for missing or invalid data
-
-### Performance Metrics
-- **Edge calculations** for mathematical advantage
-- **Confidence scoring** based on standard deviations
-- **Sample size requirements** for statistical significance
-- **Hit rate tracking** for recommendation accuracy
-
-## 📈 Monitoring & Maintenance
-
-### Weekly Tasks
-1. **Update active roster** in `data/master_roster.xlsx`
-2. **Run complete pipeline** for current week
-3. **Review AI recommendations** for accuracy
-4. **Track performance** of betting suggestions
-
-### Data Quality
-- **Monitor name matching** between sources
-- **Validate projection accuracy** against actual results
-- **Update team mappings** as needed
-- **Maintain API keys** and dependencies
-
-## 🚨 Troubleshooting
-
-### Common Issues
-- **Missing API keys** - Check `.env` file configuration
-- **Name mismatches** - Review player mapping files
-- **Data validation errors** - Check active roster completeness
-- **Projection failures** - Verify game data quality
-
-### Log Files
-- `scraper_errors.log` - Web scraping errors
-- `odds_scraper.log` - Odds collection issues
-- Console output - Real-time processing status
-
-## 📚 Documentation
-
-- **`CONTEXT.md`** - Project progress and current state
-- **`.cursorrules`** - Development guidelines
-- **Inline comments** - Detailed code documentation
-- **Function docstrings** - API documentation
-
----
-
-*This platform combines the power of data science, web scraping, and AI to provide the most comprehensive NFL analysis and betting intelligence available.*
+This system helps you stay informed about NFL player injuries and game statistics automatically, making it easier to make informed decisions for fantasy football or general NFL analysis.

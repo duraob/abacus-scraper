@@ -4,13 +4,14 @@ This document provides step-by-step instructions for running each core module in
 
 ## Overview
 
-The pipeline consists of 5 core modules that work together to provide comprehensive NFL analysis:
+The pipeline consists of 6 core modules that work together to provide comprehensive NFL analysis:
 
 1. **nfl_data.py** - Scrapes historical game data from Pro Football Reference
-2. **projection.py** - Generates player projections using time-weighted historical data
-3. **odds.py** - Scrapes current week odds and player props from The Odds API
-4. **picks_agent.py** - Analyzes projections vs odds to identify betting opportunities
-5. **stats_agent.py** - Generates statistical insights and betting nuggets
+2. **injuries.py** - Scrapes current injury data from ESPN NFL injuries page
+3. **projection.py** - Generates player projections using time-weighted historical data
+4. **odds.py** - Scrapes current week odds and player props from The Odds API
+5. **picks_agent.py** - Analyzes projections vs odds to identify betting opportunities
+6. **stats_agent.py** - Generates statistical insights and betting nuggets
 
 ## Prerequisites
 
@@ -58,7 +59,30 @@ python nfl_data.py test
 
 ---
 
-### 2. Projection Generation (projection.py)
+### 2. Injury Data Collection (injuries.py)
+
+**Purpose**: Scrape current injury data from ESPN to exclude unavailable players from projections
+
+**Usage**:
+```bash
+# Scrape current injury data
+python injuries.py
+```
+
+**Output**:
+- `data/injuries.csv` - Current injury data for all 32 teams
+
+**When to Run**: Before generating projections (typically Tuesday-Wednesday)
+
+**Key Features**:
+- Scrapes all 32 NFL teams' injury reports
+- Converts team names to standard abbreviations
+- Excludes players who are "Out" or "Injured Reserve" from projections
+- Uses undetected Chrome driver to avoid bot detection
+
+---
+
+### 3. Projection Generation (projection.py)
 
 **Purpose**: Generate player projections using time-weighted historical data
 
@@ -80,16 +104,17 @@ python projection.py 3
 - `nfl25_team.csv` - Team-level aggregated statistics
 - `nfl25_players.csv` - Player-level aggregated statistics
 
-**When to Run**: Weekly, after fresh game data is available
+**When to Run**: Weekly, after fresh game data and injury data are available
 
 **Key Features**:
 - Time-weighted projections (recent games weighted more heavily)
 - Player consolidation (players on current team only)
 - Opponent-based matchup adjustments
+- **Injury filtering**: Automatically excludes "Out" and "Injured Reserve" players
 
 ---
 
-### 3. Odds Collection (odds.py)
+### 4. Odds Collection (odds.py)
 
 **Purpose**: Scrape current week odds and player props from The Odds API
 
@@ -118,7 +143,7 @@ python -c "from odds import OddsScraper; scraper = OddsScraper(); print('API Tes
 
 ---
 
-### 4. Betting Analysis (picks_agent.py)
+### 5. Betting Analysis (picks_agent.py)
 
 **Purpose**: Analyze projections vs odds to identify high-confidence betting opportunities
 
@@ -145,7 +170,7 @@ python -c "from picks_agent import main; main(2, use_ai=True)"
 
 ---
 
-### 5. Statistical Insights (stats_agent.py)
+### 6. Statistical Insights (stats_agent.py)
 
 **Purpose**: Generate statistical insights and betting nuggets from historical data
 
@@ -181,22 +206,25 @@ python stats_agent.py 3
 # 1. Scrape fresh game data
 python nfl_data.py 2025
 
-# 2. Generate projections for next week
+# 2. Scrape current injury data
+python injuries.py
+
+# 3. Generate projections for next week (excludes injured players)
 python projection.py 2  # Replace 2 with current week + 1
 ```
 
 ### Wednesday-Thursday (When Odds Posted)
 ```bash
-# 3. Scrape current week odds
+# 4. Scrape current week odds
 python odds.py 2  # Replace 2 with current week
 
-# 4. Generate statistical insights
+# 5. Generate statistical insights
 python stats_agent.py 2  # Replace 2 with current week
 ```
 
 ### Thursday-Friday (Analysis)
 ```bash
-# 5. Run betting analysis
+# 6. Run betting analysis
 python picks_agent.py
 ```
 
@@ -206,6 +234,7 @@ python picks_agent.py
 data/
 ├── game_data_2024.csv          # Historical season data
 ├── game_data_2025.csv          # Current season data
+├── injuries.csv                # Current injury data
 ├── master_roster.xlsx          # Active player roster
 ├── team_map.xlsx              # Team name mappings
 ├── nfl-2025-EasternStandardTime.csv  # NFL schedule
@@ -264,6 +293,7 @@ python -c "from picks_agent import call_grok_api; print('Grok API test')"
 ## Performance Notes
 
 - **nfl_data.py**: Takes 5-10 minutes for full season scrape
+- **injuries.py**: Takes 2-3 minutes for all 32 teams
 - **projection.py**: Takes 1-2 minutes for projections
 - **odds.py**: Takes 2-3 minutes (rate limited)
 - **picks_agent.py**: Takes 3-5 minutes (includes AI analysis)
@@ -272,7 +302,7 @@ python -c "from picks_agent import call_grok_api; print('Grok API test')"
 ## Support
 
 For issues or questions:
-1. Check log files: `nfl_data_enhanced.log`, `odds_scraper.log`
+1. Check log files: `nfl_data_enhanced.log`, `odds_scraper.log`, `injuries_scraper.log`
 2. Verify API keys in `.env` file
 3. Ensure all required data files are present
 4. Check file permissions and directory structure

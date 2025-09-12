@@ -10,15 +10,69 @@ from datetime import datetime as dt
 # Global variable for current week parameter
 current_week_param = 0
 
-def load_active_roster(roster_file="data/master_roster.xlsx"):
+def load_injured_players(injuries_file="data/injuries.csv"):
     """
-    Load and clean active roster data from Excel file.
+    Load injured players data and return set of players who are Out or Injured Reserve.
+    
+    Args:
+        injuries_file: Path to the injuries CSV file
+    
+    Returns:
+        set: Set of player names who are Out or Injured Reserve
+    """
+    if not os.path.exists(injuries_file):
+        print(f"Injuries file not found: {injuries_file}. Proceeding without injury filtering.")
+        return set()
+    
+    try:
+        print(f"Loading injury data from {injuries_file}...")
+        df_injuries = pd.read_csv(injuries_file)
+        
+        # Filter for players who are Out or Injured Reserve
+        injured_players = df_injuries[
+            df_injuries['status'].isin(['Out', 'Injured Reserve'])
+        ]['name'].tolist()
+        
+        # Clean player names to match roster format
+        def clean_player_name(name):
+            """Clean player name by normalizing whitespace"""
+            if pd.isna(name):
+                return None
+            name = str(name).strip()
+            # Normalize multiple spaces to single space
+            name = ' '.join(name.split())
+            return name
+        
+        injured_players_clean = set()
+        for player in injured_players:
+            clean_name = clean_player_name(player)
+            if clean_name:
+                injured_players_clean.add(clean_name)
+        
+        print(f"Found {len(injured_players_clean)} players who are Out or Injured Reserve")
+        
+        # Log some examples
+        if injured_players_clean:
+            example_players = list(injured_players_clean)[:5]
+            print(f"Examples of injured players: {example_players}")
+        
+        return injured_players_clean
+        
+    except Exception as e:
+        print(f"Error loading injury data: {e}. Proceeding without injury filtering.")
+        return set()
+
+
+def load_active_roster(roster_file="data/master_roster.xlsx", injuries_file="data/injuries.csv"):
+    """
+    Load and clean active roster data from Excel file, excluding injured players.
     
     Args:
         roster_file: Path to the master roster Excel file
+        injuries_file: Path to the injuries CSV file
     
     Returns:
-        set: Cleaned set of active player names for filtering
+        set: Cleaned set of active player names for filtering (excluding injured players)
     """
     if not os.path.exists(roster_file):
         raise FileNotFoundError(f"Active roster file not found: {roster_file}")
@@ -44,14 +98,23 @@ def load_active_roster(roster_file="data/master_roster.xlsx"):
     
     # Apply cleaning and filter out None values
     df_roster['clean_name'] = df_roster['Player'].apply(clean_player_name)
-    active_players = set(df_roster['clean_name'].dropna())
+    roster_players = set(df_roster['clean_name'].dropna())
     
-    print(f"Loaded {len(active_players)} active players from roster")
+    print(f"Loaded {len(roster_players)} players from roster")
+    
+    # Load injured players and exclude them
+    injured_players = load_injured_players(injuries_file)
+    
+    # Remove injured players from active roster
+    active_players = roster_players - injured_players
+    
+    print(f"Excluded {len(injured_players)} injured players from active roster")
+    print(f"Final active roster size: {len(active_players)} players")
     
     # Log any name cleaning that occurred
     original_names = set(df_roster['Player'].dropna())
-    if len(original_names) != len(active_players):
-        cleaned_count = len(original_names) - len(active_players)
+    if len(original_names) != len(roster_players):
+        cleaned_count = len(original_names) - len(roster_players)
         print(f"Cleaned {cleaned_count} player names (removed injury/status suffixes)")
     
     return active_players
@@ -935,8 +998,8 @@ def run_with_time_weighted_data(week_2025_file, weeks_2024_file, target_weeks_20
     print(f"Generating projections for Week {current_week_param}")
     print(f"Using time-weighted data with decay weighting\n")
     
-    # Load active roster and player team mapping
-    active_roster = load_active_roster(roster_file)
+    # Load active roster and player team mapping (excluding injured players)
+    active_roster = load_active_roster(roster_file, injuries_file="data/injuries.csv")
     player_team_mapping = create_player_team_mapping(roster_file)
     
     # Create time-weighted dataset with dynamic week selection
@@ -982,9 +1045,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         if sys.argv[1] == "--week":
             # Specify current week: python projection.py --week 2
-        if len(sys.argv) > 2:
+            if len(sys.argv) > 2:
                 current_week = int(sys.argv[2])
-        else:
+            else:
                 print("Usage: python projection.py --week <week_number>")
                 print("Example: python projection.py --week 2")
                 sys.exit(1)

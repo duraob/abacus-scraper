@@ -425,13 +425,12 @@ def get_live_search_context(player_name, week, opponent=None):
         chat = client.chat.create(
             model="grok-4",
             search_parameters=SearchParameters(
-                max_search_results=5,
+                max_search_results=3,
                 return_citations=True,
                 from_date=datetime.now() - timedelta(days=2),
                 sources=[
-                    web_source(allowed_websites=["https://www.nfl.com/news/", 
-                                                 "https://www.nfl.com/injuries/"
-                                                 "https://www.espn.com/nfl/"]),
+                    web_source(allowed_websites=["https://www.nfl.com/news/",
+                                                 "https://www.espn.com/nfl/injuries"]),
                     x_source(included_x_handles=["rapsheet", "adamschefter"])
                 ]
             )
